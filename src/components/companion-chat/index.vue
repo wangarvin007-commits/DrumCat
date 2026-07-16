@@ -174,14 +174,19 @@ async function loadImage(file: File) {
     return
   }
 
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(file)
+    })
 
-  selectedImage.value = { name: file.name, type: file.type, dataUrl }
+    selectedImage.value = { name: file.name, type: file.type, dataUrl }
+  } catch {
+    selectedImage.value = undefined
+    attachmentError.value = '图片读取失败，请重新选择文件。'
+  }
 }
 
 function toggleVoiceInput() {
@@ -217,13 +222,21 @@ function toggleVoiceInput() {
     listening.value = false
   }
   listening.value = true
-  recognition.start()
+
+  try {
+    recognition.start()
+  } catch {
+    listening.value = false
+    recognition = undefined
+    attachmentError.value = '语音输入启动失败，请检查系统权限后重试。'
+  }
 }
 </script>
 
 <template>
   <section
     class="companion-panel"
+    data-testid="companion-panel"
     @contextmenu.stop
     @dragover.prevent
     @drop="handleDrop"
@@ -354,6 +367,7 @@ function toggleVoiceInput() {
         <textarea
           v-model="draft"
           aria-label="输入消息"
+          data-testid="chat-input"
           :disabled="busy"
           placeholder="说点什么，或输入“专注 25 分钟”…"
           rows="1"

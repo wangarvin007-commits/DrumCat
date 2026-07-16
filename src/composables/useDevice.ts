@@ -3,12 +3,13 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { error as logError } from '@tauri-apps/plugin-log'
 import { useThrottleFn } from '@vueuse/core'
 import { isNil } from 'es-toolkit'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { useAppStore } from '@/stores/app'
 import { useCatStore } from '@/stores/cat'
 import { useCompanionStore } from '@/stores/companion'
 import { usePetStore } from '@/stores/pet'
+import { createHoverAvoidanceController } from '@/utils/hover'
 import { inBetween } from '@/utils/is'
 import { isMac } from '@/utils/platform'
 
@@ -45,17 +46,43 @@ export function useDevice() {
   const companionStore = useCompanionStore()
   const petStore = usePetStore()
   const scaleFactor = ref(1)
+  const hoverHidden = ref(false)
   const pointerThrottle = computed(() => 1_000 / Math.max(15, catStore.model.maxFPS))
+  let unlistenScaleChange: (() => void) | undefined
+
+  function applyCursorPolicy() {
+    document.body.style.setProperty('opacity', hoverHidden.value ? '0' : 'unset')
+    void appWindow.setIgnoreCursorEvents(catStore.window.passThrough || hoverHidden.value)
+  }
+
+  const hoverAvoidance = createHoverAvoidanceController((hidden) => {
+    hoverHidden.value = hidden
+    applyCursorPolicy()
+  })
 
   onMounted(async () => {
     scaleFactor.value = isMac ? await appWindow.scaleFactor() : 1
 
-    appWindow.onScaleChanged(({ payload }) => {
+    unlistenScaleChange = await appWindow.onScaleChanged(({ payload }) => {
       if (!isMac) return
 
       scaleFactor.value = payload.scaleFactor
     })
   })
+
+  onBeforeUnmount(() => {
+    unlistenScaleChange?.()
+    hoverAvoidance.reset()
+  })
+
+  watch(
+    [() => catStore.window.passThrough, () => catStore.window.hideOnHover],
+    ([, hideOnHover]) => {
+      if (!hideOnHover) hoverAvoidance.reset()
+      applyCursorPolicy()
+    },
+    { immediate: true },
+  )
 
   const startListening = async () => {
     try {
@@ -65,38 +92,18 @@ export function useDevice() {
     }
   }
 
-  const onHideOnHover = (() => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let wasInWindow = false
+  function updateHoverAvoidance(x: number, y: number) {
+    const { x: winX, y: winY, width, height } = appStore.windowState[WINDOW_LABEL.MAIN] ?? {}
 
-    return (x: number, y: number) => {
-      const { x: winX, y: winY, width, height } = appStore.windowState[WINDOW_LABEL.MAIN] ?? {}
+    if (isNil(winX) || isNil(winY) || isNil(width) || isNil(height)) return
 
-      if (isNil(winX) || isNil(winY) || isNil(width) || isNil(height)) return
-
-      const isInWindow = inBetween(x, winX, winX + width)
-        && inBetween(y, winY, winY + height)
-
-      if (isInWindow === wasInWindow) return
-
-      if (timer) {
-        clearTimeout(timer)
-        timer = undefined
-      }
-
-      if (isInWindow) {
-        timer = setTimeout(() => {
-          document.body.style.setProperty('opacity', '0')
-          appWindow.setIgnoreCursorEvents(true)
-        }, catStore.window.hideOnHoverDelay * 1000)
-      } else {
-        document.body.style.setProperty('opacity', 'unset')
-        appWindow.setIgnoreCursorEvents(catStore.window.passThrough)
-      }
-
-      wasInWindow = isInWindow
-    }
-  })()
+    hoverAvoidance.update({
+      delayMs: Math.max(0, catStore.window.hideOnHoverDelay) * 1000,
+      enabled: catStore.window.hideOnHover,
+      inside: inBetween(x, winX, winX + width)
+        && inBetween(y, winY, winY + height),
+    })
+  }
 
   const handleCursorMove = useThrottleFn((cursorPoint: CursorPoint) => {
     const x = cursorPoint.x * scaleFactor.value
@@ -118,9 +125,7 @@ export function useDevice() {
       petStore.setLook(lookX, lookY)
     }
 
-    if (catStore.window.hideOnHover) {
-      onHideOnHover(x, y)
-    }
+    updateHoverAvoidance(x, y)
   }, pointerThrottle)
 
   const handleKeyboardPress = useThrottleFn(() => {

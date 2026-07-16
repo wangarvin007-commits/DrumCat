@@ -211,7 +211,7 @@ export const usePetStore = defineStore('pet', () => {
     look.x = Math.max(-1, Math.min(1, x))
     look.y = Math.max(-1, Math.min(1, y))
 
-    if (sleeping.value || Date.now() - lastActivityAt.value >= 500) {
+    if (!sleeping.value && Date.now() - lastActivityAt.value >= 500) {
       noteActivity()
     }
   }

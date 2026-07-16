@@ -300,6 +300,25 @@ export async function streamCompanionReply(options: StreamCompanionOptions): Pro
   let buffer = ''
   let result = ''
 
+  const consumeLine = (line: string) => {
+    const payload = line.trim()
+    if (!payload.startsWith('data:')) return
+
+    const json = payload.slice(5).trim()
+    if (!json || json === '[DONE]') return
+
+    try {
+      const data = JSON.parse(json) as { choices?: Array<{ delta?: { content?: string } }> }
+      const delta = data.choices?.[0]?.delta?.content || ''
+
+      if (!delta) return
+      result += delta
+      options.onDelta(delta)
+    } catch {
+      // Some compatible endpoints send keep-alive or vendor-specific events.
+    }
+  }
+
   while (true) {
     const { done, value } = await reader.read()
     buffer += decoder.decode(value, { stream: !done })
@@ -307,26 +326,12 @@ export async function streamCompanionReply(options: StreamCompanionOptions): Pro
     const lines = buffer.split('\n')
     buffer = lines.pop() || ''
 
-    for (const line of lines) {
-      const payload = line.trim()
-      if (!payload.startsWith('data:')) continue
+    lines.forEach(consumeLine)
 
-      const json = payload.slice(5).trim()
-      if (!json || json === '[DONE]') continue
-
-      try {
-        const data = JSON.parse(json) as { choices?: Array<{ delta?: { content?: string } }> }
-        const delta = data.choices?.[0]?.delta?.content || ''
-
-        if (!delta) continue
-        result += delta
-        options.onDelta(delta)
-      } catch {
-        // Some compatible endpoints send keep-alive or vendor-specific events.
-      }
+    if (done) {
+      if (buffer) consumeLine(buffer)
+      break
     }
-
-    if (done) break
   }
 
   return result.trim()

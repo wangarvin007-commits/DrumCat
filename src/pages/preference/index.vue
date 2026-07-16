@@ -15,7 +15,7 @@ import type { InteractionTrigger } from '@/stores/companion'
 
 import PetSkinPicker from '@/components/pet-skin-picker/index.vue'
 import Shortcut from '@/components/shortcut/index.vue'
-import { GITHUB_LINK } from '@/constants'
+import { PROJECT_GITHUB_LINK, UPSTREAM_GITHUB_LINK } from '@/constants'
 import { isRunningAsAdministrator } from '@/plugins/adminStatus'
 import { useAppStore } from '@/stores/app'
 import { useCatStore } from '@/stores/cat'
@@ -77,7 +77,13 @@ watch(() => generalStore.appearance.isDark, (value) => {
 
 onMounted(async () => {
   await appWindow.setTitle('DrumCat 设置')
-  logDir.value = await appLogDir()
+
+  try {
+    logDir.value = await appLogDir()
+  } catch {
+    logDir.value = ''
+  }
+
   await refreshPermission()
 })
 
@@ -138,6 +144,12 @@ function formatReminderTime(timestamp: number) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(timestamp)
+}
+
+async function openLogDirectory() {
+  if (!logDir.value) return
+
+  await openPath(logDir.value)
 }
 </script>
 
@@ -719,7 +731,10 @@ function formatReminderTime(timestamp: number) {
             <div><strong>当前版本</strong><small>本地 MVP</small></div><span class="value-text">v{{ appStore.version }}</span>
           </div>
           <div class="setting-row">
-            <div><strong>技术底座</strong><small>保留原项目许可与来源说明</small></div><a :href="GITHUB_LINK">查看上游项目</a>
+            <div><strong>项目源码</strong><small>DrumCat 已按 MIT 许可公开</small></div><a :href="PROJECT_GITHUB_LINK">打开 GitHub</a>
+          </div>
+          <div class="setting-row">
+            <div><strong>技术底座</strong><small>保留原项目许可与来源说明</small></div><a :href="UPSTREAM_GITHUB_LINK">查看上游项目</a>
           </div>
           <div class="setting-row">
             <div><strong>诊断信息</strong><small>复制系统和运行时版本，不含聊天记录</small></div><button
@@ -733,8 +748,9 @@ function formatReminderTime(timestamp: number) {
           <div class="setting-row">
             <div><strong>应用日志</strong><small>{{ logDir }}</small></div><button
               class="secondary-button"
+              :disabled="!logDir"
               type="button"
-              @click="openPath(logDir)"
+              @click="openLogDirectory"
             >
               打开目录
             </button>

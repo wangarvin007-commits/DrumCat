@@ -69,6 +69,15 @@ export const ACTION_OPTIONS: ReadonlyArray<{ value: CompanionAction, label: stri
 ]
 
 const MAX_MESSAGES = 20
+const MAX_REMINDER_MINUTES = 7 * 24 * 60
+
+function normalizeMinutes(value: number, fallback: number, maximum: number) {
+  const number = Number(value)
+
+  return Number.isFinite(number)
+    ? Math.max(1, Math.min(maximum, Math.round(number)))
+    : fallback
+}
 
 export function getLocalDateKey(date = new Date()) {
   const year = date.getFullYear()
@@ -205,11 +214,12 @@ export const useCompanionStore = defineStore('companion', () => {
   function addReminder(text: string, minutes: number) {
     const value = text.trim()
     if (!value) return
+    const safeMinutes = normalizeMinutes(minutes, 1, MAX_REMINDER_MINUTES)
 
     const reminder: ReminderItem = {
       id: nanoid(),
       text: value,
-      dueAt: Date.now() + Math.max(1, minutes) * 60_000,
+      dueAt: Date.now() + safeMinutes * 60_000,
       done: false,
     }
     reminders.value.push(reminder)
@@ -233,7 +243,7 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 
   function startFocus(minutes = focus.focusMinutes) {
-    focus.focusMinutes = Math.max(1, Math.min(180, Math.round(minutes)))
+    focus.focusMinutes = normalizeMinutes(minutes, 25, 180)
     focus.status = 'focus'
     focus.resumeStatus = 'focus'
     focus.remainingSeconds = focus.focusMinutes * 60
@@ -242,7 +252,7 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 
   function startBreak(minutes = focus.breakMinutes) {
-    focus.breakMinutes = Math.max(1, Math.min(60, Math.round(minutes)))
+    focus.breakMinutes = normalizeMinutes(minutes, 5, 60)
     focus.status = 'break'
     focus.resumeStatus = 'break'
     focus.remainingSeconds = focus.breakMinutes * 60

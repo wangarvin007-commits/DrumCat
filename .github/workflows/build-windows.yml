@@ -15,7 +15,7 @@ jobs:
   build-windows:
     name: Windows x64 NSIS
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out source
@@ -43,12 +43,109 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run frontend and behavior checks
+        run: |
+          pnpm typecheck
+          pnpm lint:check
+          pnpm test:mvp
+
+      - name: Run Rust checks
+        run: |
+          cargo check --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
       - name: Build Windows installer
         uses: tauri-apps/tauri-action@v1
         with:
           uploadWorkflowArtifacts: true
           tauriScript: pnpm tauri
           args: --bundles nsis
+
+      - name: Locate native executable
+        shell: pwsh
+        run: |
+          $binary = Get-ChildItem target/release -Filter "*.exe" |
+            Where-Object { $_.Name -notlike "*setup*" } |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+
+          if (-not $binary) {
+            throw "DrumCat native executable was not generated."
+          }
+
+          "DRUMCAT_BINARY=$($binary.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install Windows WebDriver dependencies
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          $PWD.Path | Out-File -FilePath $env:GITHUB_PATH -Append
+          cargo install tauri-driver --locked
+          pnpm --dir e2e install --frozen-lockfile
+
+      - name: Run Windows native UI tests
+        run: pnpm --dir e2e test
+
+      - name: Smoke-test silent installer and installed app
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem target/release/bundle/nsis -Filter "*-setup.exe" |
+            Select-Object -First 1
+
+          if (-not $installer) {
+            throw "Windows NSIS installer was not generated."
+          }
+
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "Silent installer failed with exit code $($install.ExitCode)."
+          }
+
+          $uninstallRoots = @(
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+          $entry = Get-ItemProperty $uninstallRoots -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq "DrumCat" } |
+            Select-Object -First 1
+
+          if (-not $entry) {
+            throw "DrumCat uninstall registry entry was not found after installation."
+          }
+
+          $candidateRoots = @(
+            $entry.InstallLocation,
+            (Join-Path $env:LOCALAPPDATA "DrumCat"),
+            (Join-Path $env:LOCALAPPDATA "Programs\DrumCat"),
+            (Join-Path $env:ProgramFiles "DrumCat")
+          ) |
+            Where-Object { $_ -and (Test-Path $_) }
+          $installedBinary = $candidateRoots |
+            ForEach-Object {
+              Get-ChildItem $_ -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue |
+                Where-Object {
+                  $_.Name -in @("DrumCat.exe", "drum-cat.exe") -and
+                  $_.FullName -notlike "*target\release*"
+                }
+            } |
+            Select-Object -First 1
+
+          if (-not $installedBinary) {
+            throw "Installed DrumCat executable was not found."
+          }
+
+          Get-Process -Name "drum-cat" -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          $app = Start-Process -FilePath $installedBinary.FullName -PassThru
+          Start-Sleep -Seconds 8
+
+          if ($app.HasExited) {
+            throw "Installed DrumCat exited during the 8-second smoke test."
+          }
+
+          Stop-Process -Id $app.Id -Force
 
       - name: Upload installer to existing release
         shell: pwsh

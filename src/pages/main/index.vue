@@ -150,10 +150,6 @@ watch(() => catStore.window.visible, async (value) => {
   value ? await showWindow() : await hideWindow()
 })
 
-watch(() => catStore.window.passThrough, (value) => {
-  appWindow.setIgnoreCursorEvents(value)
-}, { immediate: true })
-
 watch(() => catStore.window.alwaysOnTop, setAlwaysOnTop, { immediate: true })
 watch(() => generalStore.app.taskbarVisible, setTaskbarVisibility, { immediate: true })
 
@@ -416,9 +412,15 @@ async function handleContextmenu(event: MouseEvent) {
     ],
   })
 
-  if (isWindows && catStore.window.alwaysOnTop) setAlwaysOnTop(false)
-  await menu.popup()
-  if (isWindows && catStore.window.alwaysOnTop) setAlwaysOnTop(true)
+  const restoreTopmost = isWindows && catStore.window.alwaysOnTop
+
+  if (restoreTopmost) await setAlwaysOnTop(false)
+
+  try {
+    await menu.popup()
+  } finally {
+    if (restoreTopmost) await setAlwaysOnTop(true)
+  }
 }
 
 function handleMouseMove(event: MouseEvent) {
@@ -494,6 +496,7 @@ function handlePanelAction(action: CompanionAction) {
       >
         <button
           :class="{ active: openPanel === 'skins' }"
+          data-testid="open-skins"
           title="切换皮肤"
           type="button"
           @click.stop="togglePanel('skins')"
@@ -502,6 +505,7 @@ function handlePanelAction(action: CompanionAction) {
         </button>
         <button
           :class="{ active: openPanel === 'chat' }"
+          data-testid="open-chat"
           title="打开陪伴面板（⌘/Ctrl + K）"
           type="button"
           @click.stop="togglePanel('chat')"
@@ -509,6 +513,7 @@ function handlePanelAction(action: CompanionAction) {
           <span class="i-solar:chat-round-dots-bold" />
         </button>
         <button
+          data-testid="open-settings"
           title="设置"
           type="button"
           @click.stop="openSettings"

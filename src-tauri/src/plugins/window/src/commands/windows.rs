@@ -1,5 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Runtime, WebviewWindow, command};
@@ -8,7 +7,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
 };
 
-static TOPMOST_RUNNING: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+static TOPMOST_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[command]
 pub async fn show_window<R: Runtime>(_app_handle: AppHandle<R>, window: WebviewWindow<R>) {
@@ -28,23 +27,15 @@ pub async fn set_always_on_top<R: Runtime>(
     window: WebviewWindow<R>,
     always_on_top: bool,
 ) {
-    let running = TOPMOST_RUNNING.get_or_init(|| Arc::new(AtomicBool::new(false)));
-
     let Ok(hwnd) = window.hwnd() else { return };
     let raw_hwnd = hwnd.0 as isize;
+    let generation = TOPMOST_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
 
     if always_on_top {
-        let Ok(_) = running.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        else {
-            return;
-        };
-
-        let running = Arc::clone(running);
-
         thread::spawn(move || {
             let hwnd = HWND(raw_hwnd as *mut _);
 
-            while running.load(Ordering::SeqCst) {
+            while TOPMOST_GENERATION.load(Ordering::SeqCst) == generation {
                 unsafe {
                     let _ = SetWindowPos(
                         hwnd,
@@ -56,12 +47,10 @@ pub async fn set_always_on_top<R: Runtime>(
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
                     );
                 }
-                thread::sleep(Duration::from_millis(16));
+                thread::sleep(Duration::from_millis(250));
             }
         });
     } else {
-        running.store(false, Ordering::SeqCst);
-
         let hwnd = HWND(raw_hwnd as *mut _);
 
         unsafe {

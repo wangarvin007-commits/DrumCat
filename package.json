@@ -6,11 +6,11 @@
   "author": {
     "name": "Arvin Wang"
   },
+  "homepage": "https://github.com/wangarvin007-commits/DrumCat#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wangarvin007-commits/DrumCat.git"
   },
-  "homepage": "https://github.com/wangarvin007-commits/DrumCat#readme",
   "bugs": {
     "url": "https://github.com/wangarvin007-commits/DrumCat/issues"
   },
@@ -23,6 +23,7 @@
     "test:mvp": "node --import tsx scripts/verifyMvp.ts",
     "typecheck": "tsc --noEmit",
     "lint:check": "eslint src --no-fix",
+    "package:mac": "LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 tauri build --bundles app,dmg",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint --fix src",
