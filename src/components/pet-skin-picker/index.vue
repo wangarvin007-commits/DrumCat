@@ -44,8 +44,9 @@ function closeCustomization() {
     <header
       v-if="!embedded"
       class="skin-header"
+      data-tauri-drag-region
     >
-      <div>
+      <div data-tauri-drag-region>
         <small>DRUMCAT 衣橱</small>
         <strong>今天和谁一起？</strong>
       </div>

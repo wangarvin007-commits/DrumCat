@@ -1,6 +1,6 @@
 # DrumCat
 
-DrumCat 是一个本地运行的跨平台桌宠 MVP，使用 Tauri、Vue 3 和 Rust 构建。主窗口透明、无边框并可置顶，支持半写实猫狗皮肤、键鼠互动、自动睡眠、对话、专注计时、系统提醒、托盘菜单、快捷键和设置持久化。
+DrumCat 是一个本地运行的跨平台桌宠，使用 Tauri、Vue 3 和 Rust 构建。主窗口透明、无边框并可置顶，支持半写实猫狗皮肤、键鼠互动、自动睡眠、对话、专注计时、系统提醒、托盘菜单、快捷键和设置持久化。对话面板采用紧凑窗口，打开时不会生成大面积透明置顶区域，关闭后会恢复桌宠原尺寸和原位置。
 
 完整的对外产品介绍和逐项功能清单见 [`产品文案.md`](产品文案.md)。
 
@@ -16,8 +16,8 @@ Windows 安装包当前未购买代码签名证书，首次安装时 Windows Def
 SHA-256：
 
 - Windows EXE：`a7e8333b9184e474c827cd5bd49968c8a951c44e792365e33bcf455abe214244`
-- DMG：`eeb2caae3c6b7e282b2b6070891466276a2331acb30b106643127a9bb7d53a89`
-- ZIP：`391b777490b2eb6af339a97bcc971872428a224973484e35e5e71210cf09a426`
+- DMG：`e2c0a5d5ac8fad2b8111f3d9a37a85416309dbd1f2f63b4b8d4ece01ecc1d39e`
+- ZIP：`cb2c6c35fa003c77bd8f84d80435c97ada2dd72a25a0900a3be5b6218497f128`
 
 ## MVP 功能
 
@@ -26,7 +26,10 @@ SHA-256：
 - 自动眨眼、待机、睡觉与点击唤醒
 - 全局键盘输入触发挥爪动作
 - 鼠标注视、点击跳跃和右键菜单
-- 本地规则对话，以及可选的 OpenAI 兼容流式对话与图片理解
+- 本地规则对话，以及可选的多厂商 AI 流式对话与图片理解
+- OpenAI、Anthropic Claude、Gemini、DeepSeek、通义千问、Kimi、智谱、硅基流动、OpenRouter、Azure、Ollama、LM Studio 和自定义兼容接口预设
+- 可配置桌宠名字、主人名字、长期职责、当前目标和偏好；这些信息会组成内置身份指令
+- API 请求通过 Rust 原生网络层发送并支持测试连接；密钥只在运行内存中跨窗口同步
 - 回复驱动动作、表情、语音朗读和睡眠
 - 专注计时、自动休息、待办、定时提醒和原生系统通知
 - 陪伴、专注、安静、会议、游戏和直播 / OBS 模式
@@ -42,9 +45,9 @@ SHA-256：
 
 <img alt="Arvin 微信二维码" src="public/custom-skin/arvin-wechat.jpg" width="260">
 
-macOS 的跨应用键盘和鼠标互动需要在“系统设置 → 隐私与安全性 → 输入监控”中授权 DrumCat。Windows 安装包已通过 GitHub Actions 的 Windows x64 环境完成原生编译和 NSIS 打包；安装体验及全局键鼠交互仍建议在实际 Windows 10/11 设备上继续验收。
+macOS 的跨应用键盘和鼠标互动需要在“系统设置 → 隐私与安全性 → 输入监控”中授权 DrumCat。Windows 安装包通过 GitHub Actions 的 Windows x64 环境完成原生编译、WebDriver UI 回归、NSIS 静默安装和安装后启动检查。
 
-远程自由对话和图片理解需要用户自行配置兼容 API。不开启 API 时，本地聊天、指令、番茄钟、提醒、任务、动作和全部桌面互动仍可使用。语音朗读使用系统 TTS；语音输入取决于系统 WebView 是否提供语音识别，MVP 不内置体积较大的离线识别模型。
+远程自由对话和图片理解需要用户自行配置 API。DrumCat 原生支持 Anthropic Messages，并兼容 OpenAI Chat Completions 生态；其他兼容服务可填写完整接口地址、模型、协议和鉴权请求头。不开启 API 时，本地聊天、指令、番茄钟、提醒、任务、动作和全部桌面互动仍可使用。语音朗读使用系统 TTS；语音输入取决于系统 WebView 是否提供语音识别，本版不内置体积较大的离线识别模型。
 
 ## 默认快捷键
 
@@ -74,6 +77,7 @@ pnpm tauri build
 pnpm typecheck
 pnpm lint:check
 pnpm test:mvp
+cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy -p drum-cat -- -D warnings
 ```
 

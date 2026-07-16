@@ -1,5 +1,5 @@
 mod core;
-use core::{device::start_device_listening, prevent_default, setup};
+use core::{ai::stream_ai_reply, device::start_device_listening, prevent_default, setup};
 use tauri::{
     Manager, WindowEvent, generate_handler,
     menu::{MenuBuilder, SubmenuBuilder},
@@ -58,7 +58,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(generate_handler![start_device_listening])
+        .invoke_handler(generate_handler![start_device_listening, stream_ai_reply])
         .plugin(tauri_plugin_admin_status::init())
         .plugin(tauri_plugin_custom_window::init())
         .plugin(tauri_plugin_os::init())

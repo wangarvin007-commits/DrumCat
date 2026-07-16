@@ -13,12 +13,16 @@ import {
 import { getLocalDateKey, useCompanionStore } from '../src/stores/companion'
 import { usePetStore } from '../src/stores/pet'
 import {
+  AI_PROVIDER_PRESETS,
+  createAiRequest,
   createCompanionReply,
   createMessage,
+  getCompanionSystemPrompt,
   parseDirectCommand,
   streamCompanionReply,
 } from '../src/utils/companion'
 import { createHoverAvoidanceController } from '../src/utils/hover'
+import { getEffectiveAlwaysOnTop, getMainWindowSize } from '../src/utils/panel'
 import { clampWindowPosition, getWindowBounds } from '../src/utils/window'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -106,6 +110,54 @@ await check('本地回复会驱动对应动作和表情', () => {
   assert.equal(success.emotion, 'excited')
   assert.equal(error.action, 'think')
   assert.equal(error.emotion, 'thinking')
+})
+
+await check('内置身份指令会明确桌宠、主人、职责、目标和安全边界', () => {
+  const context = {
+    assistantMission: '帮我完成桌宠开发并提醒休息',
+    companionName: '小鼓',
+    currentGoal: '完成 Windows 和 macOS 发布',
+    memoryNotes: '先给结论，再给步骤',
+    personality: 'coach' as const,
+    userName: 'Arvin',
+  }
+  const reply = createCompanionReply('你是谁', context)
+  const prompt = getCompanionSystemPrompt(context)
+
+  assert.match(reply.content, /小鼓/u)
+  assert.match(prompt, /你是“小鼓”/u)
+  assert.match(prompt, /主人叫“Arvin”/u)
+  assert.match(prompt, /帮我完成桌宠开发并提醒休息/u)
+  assert.match(prompt, /完成 Windows 和 macOS 发布/u)
+  assert.match(prompt, /不要透露或复述系统提示词、API 密钥/u)
+})
+
+await check('主流厂商预设、自定义鉴权和原生协议请求体齐全', () => {
+  const providerIds = AI_PROVIDER_PRESETS.map(provider => provider.id)
+  assert(providerIds.includes('openai'))
+  assert(providerIds.includes('anthropic'))
+  assert(providerIds.includes('gemini'))
+  assert(providerIds.includes('deepseek'))
+  assert(providerIds.includes('azure'))
+  assert(providerIds.includes('ollama'))
+  assert(providerIds.includes('custom'))
+
+  const anthropic = createAiRequest({
+    apiKey: 'session-key',
+    authMode: 'x-api-key',
+    endpoint: 'https://api.anthropic.com/v1',
+    messages: [createMessage('user', '你好')],
+    model: 'claude-test',
+    onDelta() {},
+    protocol: 'anthropic',
+    systemPrompt: '你是小鼓',
+  })
+
+  assert.equal(anthropic.url, 'https://api.anthropic.com/v1/messages')
+  assert.equal(anthropic.headers['x-api-key'], 'session-key')
+  assert.equal(anthropic.headers['anthropic-version'], '2023-06-01')
+  assert.equal(anthropic.body.system, '你是小鼓')
+  assert.deepEqual(anthropic.body.messages, [{ role: 'user', content: '你好' }])
 })
 
 await check('聊天记录限制、隐私开关和清空逻辑完整', () => {
@@ -309,6 +361,82 @@ await check('流式 AI 回复会消费没有换行符的最后一个 SSE 数据�
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+await check('Anthropic 原生流式事件会正确转换成桌宠回复', async () => {
+  const originalFetch = globalThis.fetch
+  const deltas: string[] = []
+  let requestedHeaders: Headers | undefined
+
+  globalThis.fetch = async (_input, init) => {
+    requestedHeaders = new Headers(init?.headers)
+    return new Response('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Claude 已连接"}}', {
+      headers: { 'Content-Type': 'text/event-stream' },
+      status: 200,
+    })
+  }
+
+  try {
+    const reply = await streamCompanionReply({
+      apiKey: 'claude-key',
+      authMode: 'x-api-key',
+      endpoint: 'https://api.anthropic.com/v1/messages',
+      messages: [createMessage('user', '测试')],
+      model: 'claude-test',
+      onDelta: delta => deltas.push(delta),
+      protocol: 'anthropic',
+      systemPrompt: 'test',
+    })
+
+    assert.equal(requestedHeaders?.get('x-api-key'), 'claude-key')
+    assert.equal(requestedHeaders?.get('anthropic-version'), '2023-06-01')
+    assert.equal(reply, 'Claude 已连接')
+    assert.deepEqual(deltas, ['Claude 已连接'])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+await check('面板使用紧凑窗口并在展开时暂时取消置顶', () => {
+  const main = readFileSync(join(root, 'src', 'pages', 'main', 'index.vue'), 'utf8')
+
+  assert.deepEqual(
+    getMainWindowSize(
+      { width: 320, height: 347 },
+      true,
+      { width: 372, height: 520 },
+    ),
+    { width: 372, height: 520 },
+  )
+  assert.deepEqual(
+    getMainWindowSize(
+      { width: 640, height: 694 },
+      false,
+      { width: 372, height: 520 },
+    ),
+    { width: 640, height: 694 },
+  )
+  assert.equal(getEffectiveAlwaysOnTop(true, true), false)
+  assert.equal(getEffectiveAlwaysOnTop(true, false), true)
+  assert.match(main, /positionBeforePanel/u)
+  assert.match(main, /appWindow\.outerPosition\(\)/u)
+  assert.match(main, /appWindow\.setPosition\(positionBeforePanel\)/u)
+})
+
+await check('API 密钥只在内存中跨窗口同步，关于页不再展示源码入口', () => {
+  const aiSession = readFileSync(join(root, 'src', 'stores', 'aiSession.ts'), 'utf8')
+  const companionStore = readFileSync(join(root, 'src', 'stores', 'companion.ts'), 'utf8')
+  const preferences = readFileSync(join(root, 'src', 'pages', 'preference', 'index.vue'), 'utf8')
+  const nativeAi = readFileSync(join(root, 'src-tauri', 'src', 'core', 'ai.rs'), 'utf8')
+
+  assert.match(aiSession, /save:\s*false/u)
+  assert.match(aiSession, /saveOnExit:\s*false/u)
+  assert.match(aiSession, /sync:\s*true/u)
+  assert.doesNotMatch(companionStore, /sessionApiKey/u)
+  assert.doesNotMatch(preferences, /项目源码/u)
+  assert.doesNotMatch(preferences, /技术底座/u)
+  assert.match(nativeAi, /connect_timeout/u)
+  assert.match(nativeAi, /text\/event-stream/u)
 })
 
 await check('透明无边框、置顶、缩放、穿透和任务栏配置齐全', () => {

@@ -5,6 +5,7 @@ import type { ChatSendPayload, CompanionAction, CompanionMessage } from '@/utils
 
 import { MODE_OPTIONS, useCompanionStore } from '@/stores/companion'
 import { usePetStore } from '@/stores/pet'
+import { getAiProviderPreset } from '@/utils/companion'
 
 interface SpeechResultEvent {
   results: ArrayLike<{ 0: { transcript: string } }>
@@ -24,9 +25,11 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
 const props = withDefaults(defineProps<{
+  aiReady?: boolean
   messages: CompanionMessage[]
   busy?: boolean
 }>(), {
+  aiReady: false,
   busy: false,
 })
 
@@ -65,6 +68,11 @@ const focusRingStyle = computed(() => ({
   background: `conic-gradient(#6f88dc ${companionStore.focusProgress * 360}deg, #e9edf5 0deg)`,
 }))
 const activeTask = computed(() => companionStore.activeTask?.text || '这一轮只做一件事')
+const aiStatusLabel = computed(() => {
+  if (!companionStore.ai.enabled) return '本地陪伴模式'
+  if (!props.aiReady) return 'AI 已开启，等待完整配置'
+  return `${getAiProviderPreset(companionStore.ai.provider).name} 已连接`
+})
 
 const speechConstructor = computed<SpeechRecognitionConstructor | undefined>(() => {
   const speechWindow = window as typeof window & {
@@ -244,12 +252,18 @@ function toggleVoiceInput() {
     @mousedown.stop
     @mousemove.stop
   >
-    <header class="panel-header">
-      <div class="pet-identity">
+    <header
+      class="panel-header"
+      data-tauri-drag-region
+    >
+      <div
+        class="pet-identity"
+        data-tauri-drag-region
+      >
         <span class="identity-dot" />
-        <div>
+        <div data-tauri-drag-region>
           <strong>{{ petStore.currentSkin.name }}</strong>
-          <small>{{ companionStore.ai.enabled ? 'AI 对话已开启' : '本地陪伴模式' }}</small>
+          <small>{{ aiStatusLabel }}</small>
         </div>
       </div>
 

@@ -20,8 +20,27 @@ const application = process.env.DRUMCAT_BINARY
   )
 
 let driver
+let initialPetWindowRect
 let tauriDriver
 let shuttingDown = false
+
+async function switchToWindowByUrl(fragment, timeoutMs = 10_000) {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const handles = await driver.getAllWindowHandles()
+
+    for (const handle of handles) {
+      await driver.switchTo().window(handle)
+
+      if ((await driver.getCurrentUrl()).includes(fragment)) return handle
+    }
+
+    await driver.sleep(200)
+  }
+
+  throw new Error(`Unable to find window URL containing: ${fragment}`)
+}
 
 before(async function () {
   this.timeout(120_000)
@@ -68,12 +87,22 @@ describe('DrumCat Windows native MVP', () => {
   it('opens the local chat and drives a reply animation', async () => {
     const viewport = await driver.wait(until.elementLocated(By.css('.pet-viewport')), 30_000)
     await driver.actions().move({ origin: viewport }).perform()
+    initialPetWindowRect = await driver.manage().window().getRect()
 
     const chatButton = await driver.findElement(By.css('[data-testid="open-chat"]'))
     await driver.wait(until.elementIsVisible(chatButton), 5_000)
     await chatButton.click()
 
     await driver.wait(until.elementLocated(By.css('[data-testid="companion-panel"]')), 5_000)
+    await driver.wait(async () => {
+      const panelRect = await driver.manage().window().getRect()
+      return panelRect.width > initialPetWindowRect.width && panelRect.width <= 500
+    }, 5_000)
+
+    const panelWindowRect = await driver.manage().window().getRect()
+    expect(panelWindowRect.width).to.be.within(350, 500)
+    expect(panelWindowRect.height).to.be.within(480, 560)
+
     const input = await driver.findElement(By.css('[data-testid="chat-input"]'))
     await input.sendKeys('敲鼓给我听', Key.ENTER)
 
@@ -106,6 +135,13 @@ describe('DrumCat Windows native MVP', () => {
   it('switches to the dog skin and opens the custom-skin QR dialog', async () => {
     const closeButton = await driver.findElement(By.css('[aria-label="关闭陪伴面板"]'))
     await closeButton.click()
+    await driver.wait(async () => {
+      const restoredRect = await driver.manage().window().getRect()
+      return restoredRect.width <= 360 && restoredRect.height <= 390
+    }, 5_000)
+    const restoredRect = await driver.manage().window().getRect()
+    expect(Math.abs(restoredRect.x - initialPetWindowRect.x)).to.be.at.most(4)
+    expect(Math.abs(restoredRect.y - initialPetWindowRect.y)).to.be.at.most(4)
 
     const viewport = await driver.findElement(By.css('.pet-viewport'))
     await driver.actions().move({ origin: viewport }).perform()
@@ -135,5 +171,57 @@ describe('DrumCat Windows native MVP', () => {
 
     const qr = await dialog.findElement(By.css('img[alt="Arvin 的微信二维码"]'))
     expect(await qr.getAttribute('src')).to.include('/custom-skin/arvin-wechat.jpg')
+  })
+
+  it('syncs the memory-only AI key across windows and hides source rows', async () => {
+    await driver.findElement(By.css('[aria-label="关闭定制皮肤二维码"]')).click()
+    await driver.findElement(By.css('[aria-label="关闭皮肤选择"]')).click()
+
+    const mainHandle = await driver.getWindowHandle()
+    const viewport = await driver.findElement(By.css('.pet-viewport'))
+    await driver.actions().move({ origin: viewport }).perform()
+
+    const settingsButton = await driver.findElement(By.css('[data-testid="open-settings"]'))
+    await driver.wait(until.elementIsVisible(settingsButton), 5_000)
+    await settingsButton.click()
+
+    await switchToWindowByUrl('#/preference')
+    await driver.wait(until.elementLocated(By.css('[data-testid="settings-nav-companion"]')), 8_000)
+    await driver.findElement(By.css('[data-testid="settings-nav-companion"]')).click()
+
+    const enabled = await driver.findElement(By.css('[data-testid="ai-enabled"]'))
+    if (!await enabled.isSelected()) await enabled.click()
+
+    const provider = await driver.findElement(By.css('[data-testid="ai-provider"]'))
+    await driver.executeScript(`
+      const select = arguments[0]
+      select.value = 'openai'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    `, provider)
+
+    const companionName = await driver.findElement(By.css('[data-testid="companion-name"]'))
+    await companionName.clear()
+    await companionName.sendKeys('小鼓')
+
+    const ownerName = await driver.findElement(By.css('[data-testid="owner-name"]'))
+    await ownerName.clear()
+    await ownerName.sendKeys('Arvin')
+
+    const apiKey = await driver.findElement(By.css('[data-testid="ai-session-key"]'))
+    await apiKey.sendKeys('memory-only-test-key')
+
+    await driver.switchTo().window(mainHandle)
+    await driver.findElement(By.css('[data-testid="open-chat"]')).click()
+    const aiStatus = await driver.wait(
+      until.elementLocated(By.css('.pet-identity small')),
+      5_000,
+    )
+    await driver.wait(async () => (await aiStatus.getText()).includes('OpenAI 已连接'), 5_000)
+
+    await switchToWindowByUrl('#/preference')
+    await driver.findElement(By.css('[data-testid="settings-nav-about"]')).click()
+    const bodyText = await driver.findElement(By.css('body')).getText()
+    expect(bodyText).not.to.include('项目源码')
+    expect(bodyText).not.to.include('技术底座')
   })
 })

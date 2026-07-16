@@ -3,13 +3,16 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
 
 import type {
+  AiAuthMode,
+  AiProtocol,
+  AiProviderId,
   CompanionAction,
   CompanionMessage,
   CompanionMode,
   CompanionPersonality,
 } from '@/utils/companion'
 
-import { createMessage } from '@/utils/companion'
+import { createMessage, getAiProviderPreset } from '@/utils/companion'
 
 export type InteractionTrigger
   = | 'keyboard'
@@ -90,17 +93,22 @@ export function getLocalDateKey(date = new Date()) {
 export const useCompanionStore = defineStore('companion', () => {
   const personality = ref<CompanionPersonality>('warm')
   const mode = ref<CompanionMode>('companion')
+  const companionName = ref('DrumCat')
   const userName = ref('')
+  const assistantMission = ref('陪伴我工作，帮助我拆解任务、保持专注，并适时提醒休息。')
   const currentGoal = ref('')
   const memoryNotes = ref('')
   const messages = ref<CompanionMessage[]>([])
   const rememberedMessages = ref<CompanionMessage[]>([])
-  const sessionApiKey = ref('')
 
   const ai = reactive({
     enabled: false,
-    endpoint: 'https://api.openai.com',
-    model: 'gpt-4.1-mini',
+    provider: 'openai' as AiProviderId,
+    protocol: 'openai' as AiProtocol,
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-5.2',
+    authMode: 'bearer' as AiAuthMode,
+    authHeader: 'Authorization',
     streaming: true,
   })
 
@@ -161,7 +169,7 @@ export const useCompanionStore = defineStore('companion', () => {
     }
 
     if (!messages.value.length) {
-      messages.value = [createMessage('assistant', '你好，我是 DrumCat。可以聊天、开番茄钟，或者直接说“20 分钟后提醒我喝水”。', {
+      messages.value = [createMessage('assistant', `你好，我是 ${companionName.value.trim() || 'DrumCat'}。可以聊天、开番茄钟，或者直接说“20 分钟后提醒我喝水”。`, {
         emotion: 'happy',
         action: 'wave',
       })]
@@ -198,6 +206,18 @@ export const useCompanionStore = defineStore('companion', () => {
     rememberedMessages.value = privacy.rememberConversation
       ? messages.value.map(message => ({ ...message, attachment: message.attachment ? { ...message.attachment } : undefined }))
       : []
+  }
+
+  function selectAiProvider(provider: AiProviderId) {
+    ai.provider = provider
+    if (provider === 'custom') return
+
+    const preset = getAiProviderPreset(provider)
+    ai.protocol = preset.protocol
+    ai.endpoint = preset.endpoint
+    ai.model = preset.model
+    ai.authMode = preset.authMode
+    ai.authHeader = preset.authHeader || ''
   }
 
   function addTask(text: string) {
@@ -322,12 +342,14 @@ export const useCompanionStore = defineStore('companion', () => {
   return {
     actionBindings,
     activeTask,
+    ai,
+    assistantMission,
     addMessage,
     addReminder,
     addTask,
-    ai,
     canSendProactive,
     clearMessages,
+    companionName,
     currentGoal,
     dueReminders,
     focus,
@@ -348,7 +370,7 @@ export const useCompanionStore = defineStore('companion', () => {
     removeReminder,
     removeTask,
     resumeFocus,
-    sessionApiKey,
+    selectAiProvider,
     startBreak,
     startFocus,
     stopFocus,
@@ -359,6 +381,6 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 }, {
   tauri: {
-    filterKeys: ['sessionApiKey', 'messages'],
+    filterKeys: ['messages'],
   },
 })

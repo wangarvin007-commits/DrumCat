@@ -19,6 +19,7 @@ import { useWindowState } from './composables/useWindowState'
 import { LANGUAGE, LISTEN_KEY, WINDOW_LABEL } from './constants'
 import { getAntdLocale } from './locales/index.ts'
 import { hideWindow, showWindow } from './plugins/window'
+import { useAiSessionStore } from './stores/aiSession'
 import { useAppStore } from './stores/app'
 import { useCatStore } from './stores/cat'
 import { useCompanionStore } from './stores/companion'
@@ -27,6 +28,7 @@ import { usePetStore } from './stores/pet'
 import { useShortcutStore } from './stores/shortcut.ts'
 
 const appStore = useAppStore()
+const aiSessionStore = useAiSessionStore()
 const catStore = useCatStore()
 const companionStore = useCompanionStore()
 const petStore = usePetStore()
@@ -43,6 +45,7 @@ if (appWindow.label === WINDOW_LABEL.MAIN) {
 }
 
 onMounted(async () => {
+  await aiSessionStore.$tauri.start()
   await appStore.$tauri.start()
   await appStore.init()
   await catStore.$tauri.start()
