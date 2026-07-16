@@ -1,0 +1,10 @@
+{
+  "identifier": "com.arvinwang.DrumCat",
+  "bundle": {
+    "resources": ["assets/tray-mac.png", "../THIRD_PARTY_NOTICES.md"],
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    }
+  }
+}

@@ -1,0 +1,58 @@
+import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
+import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow'
+
+import type { WINDOW_LABEL } from '../constants'
+
+import { LISTEN_KEY } from '../constants'
+
+export type WindowLabel = typeof WINDOW_LABEL[keyof typeof WINDOW_LABEL]
+
+const COMMAND = {
+  SHOW_WINDOW: 'plugin:custom-window|show_window',
+  HIDE_WINDOW: 'plugin:custom-window|hide_window',
+  SET_ALWAYS_ON_TOP: 'plugin:custom-window|set_always_on_top',
+  SET_TASKBAR_VISIBILITY: 'plugin:custom-window|set_taskbar_visibility',
+}
+
+export function showWindow(label?: WindowLabel) {
+  if (label) {
+    emit(LISTEN_KEY.SHOW_WINDOW, label)
+  } else {
+    invoke(COMMAND.SHOW_WINDOW)
+  }
+}
+
+export function hideWindow(label?: WindowLabel) {
+  if (label) {
+    emit(LISTEN_KEY.HIDE_WINDOW, label)
+  } else {
+    invoke(COMMAND.HIDE_WINDOW)
+  }
+}
+
+export function setAlwaysOnTop(alwaysOnTop: boolean) {
+  invoke(COMMAND.SET_ALWAYS_ON_TOP, { alwaysOnTop })
+}
+
+export async function toggleWindowVisible(label?: WindowLabel) {
+  const currentWindow = getCurrentWebviewWindow()
+  const targetLabel = label ?? currentWindow.label as WindowLabel
+  const targetWindow = targetLabel === currentWindow.label
+    ? currentWindow
+    : await WebviewWindow.getByLabel(targetLabel)
+
+  if (!targetWindow) return
+
+  const visible = await targetWindow.isVisible()
+
+  if (visible) {
+    return hideWindow(targetLabel)
+  }
+
+  return showWindow(targetLabel)
+}
+
+export async function setTaskbarVisibility(visible: boolean) {
+  invoke(COMMAND.SET_TASKBAR_VISIBILITY, { visible })
+}

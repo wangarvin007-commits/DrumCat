@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DrumCat",
+  "version": "../package.json",
+  "identifier": "com.arvinwang.DrumCat",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "DrumCat",
+        "url": "index.html/#/",
+        "width": 320,
+        "height": 347,
+        "minWidth": 160,
+        "minHeight": 174,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "decorations": false,
+        "resizable": true,
+        "acceptFirstMouse": true,
+        "skipTaskbar": true,
+        "maximizable": false
+      },
+      {
+        "label": "preference",
+        "url": "index.html/#/preference",
+        "visible": false,
+        "title": "DrumCat 设置",
+        "width": 900,
+        "height": 680,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "minWidth": 800,
+        "minHeight": 600,
+        "skipTaskbar": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http: https:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Entertainment",
+    "createUpdaterArtifacts": false,
+    "targets": ["nsis", "dmg", "app", "appimage", "deb", "rpm"],
+    "shortDescription": "支持猫狗皮肤与键鼠互动的本地桌宠",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": ["assets/tray.png", "../THIRD_PARTY_NOTICES.md"]
+  }
+}

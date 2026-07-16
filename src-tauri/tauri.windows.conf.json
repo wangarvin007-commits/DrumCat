@@ -1,0 +1,15 @@
+{
+  "identifier": "com.arvinwang.DrumCat",
+  "bundle": {
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "nsis": {
+        "languages": [
+          "SimpChinese"
+        ],
+        "installMode": "both",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}
