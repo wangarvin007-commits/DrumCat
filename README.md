@@ -6,14 +6,16 @@ DrumCat 是一个本地运行的跨平台桌宠 MVP，使用 Tauri、Vue 3 和 R
 
 ## 下载
 
+- Windows 10/11 x64 安装程序：[下载 EXE](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.0/DrumCat_0.1.0_Windows_x64_setup.exe)
 - macOS Apple Silicon 安装镜像：[下载 DMG](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.0/DrumCat_0.1.0_aarch64.dmg)
 - macOS Apple Silicon 应用压缩包：[下载 ZIP](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.0/DrumCat_0.1.0_macOS_arm64.zip)
 - 全部版本与更新说明：[GitHub Releases](https://github.com/wangarvin007-commits/DrumCat/releases)
 
-当前发布包为本地测试版，使用 ad-hoc 签名，尚未进行 Apple 公证。首次启动时如被 macOS 拦截，可右键应用并选择“打开”。
+Windows 安装包当前未购买代码签名证书，首次安装时 Windows Defender SmartScreen 可能显示“未知发布者”，请选择“更多信息 → 仍要运行”。macOS 发布包使用 ad-hoc 签名，尚未进行 Apple 公证；首次启动时如被 macOS 拦截，可右键应用并选择“打开”。
 
 SHA-256：
 
+- Windows EXE：`a7e8333b9184e474c827cd5bd49968c8a951c44e792365e33bcf455abe214244`
 - DMG：`eeb2caae3c6b7e282b2b6070891466276a2331acb30b106643127a9bb7d53a89`
 - ZIP：`391b777490b2eb6af339a97bcc971872428a224973484e35e5e71210cf09a426`
 
@@ -40,7 +42,7 @@ SHA-256：
 
 <img alt="Arvin 微信二维码" src="public/custom-skin/arvin-wechat.jpg" width="260">
 
-macOS 的跨应用键盘和鼠标互动需要在“系统设置 → 隐私与安全性 → 输入监控”中授权 DrumCat。Windows 使用同一套前端和 Rust 代码，但安装包需要在 Windows 构建机上生成并验收。
+macOS 的跨应用键盘和鼠标互动需要在“系统设置 → 隐私与安全性 → 输入监控”中授权 DrumCat。Windows 安装包已通过 GitHub Actions 的 Windows x64 环境完成原生编译和 NSIS 打包；安装体验及全局键鼠交互仍建议在实际 Windows 10/11 设备上继续验收。
 
 远程自由对话和图片理解需要用户自行配置兼容 API。不开启 API 时，本地聊天、指令、番茄钟、提醒、任务、动作和全部桌面互动仍可使用。语音朗读使用系统 TTS；语音输入取决于系统 WebView 是否提供语音识别，MVP 不内置体积较大的离线识别模型。
 
