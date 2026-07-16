@@ -22,15 +22,15 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.9.0
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -46,16 +46,28 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and upload Windows installer
+      - name: Build Windows installer
         uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ inputs.release_tag || 'v0.1.0' }}
-          releaseDraft: false
-          prerelease: false
-          uploadUpdaterJson: false
           uploadWorkflowArtifacts: true
           tauriScript: pnpm tauri
           args: --bundles nsis
-          releaseAssetNamePattern: DrumCat_[version]_Windows_[arch][_setup][ext]
+
+      - name: Upload installer to existing release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || 'v0.1.0' }}
+        run: |
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $source = Get-ChildItem target/release/bundle/nsis -Filter "*-setup.exe" |
+            Select-Object -First 1
+
+          if (-not $source) {
+            throw "Windows NSIS installer was not generated."
+          }
+
+          $assetName = "DrumCat_$($package.version)_Windows_x64_setup.exe"
+          $assetPath = Join-Path $env:RUNNER_TEMP $assetName
+          Copy-Item $source.FullName $assetPath
+          gh release upload $env:RELEASE_TAG $assetPath --clobber
