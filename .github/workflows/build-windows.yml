@@ -7,9 +7,6 @@ on:
         description: GitHub Release tag to receive the installer
         required: true
         default: v0.1.0
-  push:
-    branches:
-      - agent/windows-release
 
 permissions:
   contents: write

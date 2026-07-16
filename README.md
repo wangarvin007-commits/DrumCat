@@ -15,7 +15,7 @@ Windows 安装包当前未购买代码签名证书，首次安装时 Windows Def
 
 SHA-256：
 
-- Windows EXE：`f76a18f219ee53c98520c70f7cdccdcbcaa70f4f0a2c8e1bcf5a0bb17f0ddfca`
+- Windows EXE：`a7e8333b9184e474c827cd5bd49968c8a951c44e792365e33bcf455abe214244`
 - DMG：`eeb2caae3c6b7e282b2b6070891466276a2331acb30b106643127a9bb7d53a89`
 - ZIP：`391b777490b2eb6af339a97bcc971872428a224973484e35e5e71210cf09a426`
 
