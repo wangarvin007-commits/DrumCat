@@ -45,6 +45,7 @@ jobs:
 
       - name: Run frontend and behavior checks
         run: |
+          pnpm build:icon
           pnpm typecheck
           pnpm lint:check
           pnpm test:mvp
