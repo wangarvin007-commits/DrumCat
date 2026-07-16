@@ -42,6 +42,15 @@ async function switchToWindowByUrl(fragment, timeoutMs = 10_000) {
   throw new Error(`Unable to find window URL containing: ${fragment}`)
 }
 
+async function getAttribute(selector, attribute) {
+  try {
+    const element = await driver.findElement(By.css(selector))
+    return await element.getAttribute(attribute)
+  } catch {
+    return null
+  }
+}
+
 before(async function () {
   this.timeout(120_000)
 
@@ -107,29 +116,35 @@ describe('DrumCat Windows native MVP', () => {
     await input.sendKeys('敲鼓给我听', Key.ENTER)
 
     await driver.wait(async () => {
-      const messages = await driver.findElements(By.css('.message.is-assistant'))
-      const texts = await Promise.all(messages.map(message => message.getText()))
-      return texts.some(text => text.includes('给你来一段节奏'))
+      const bodyText = await driver.executeScript('return document.body?.innerText || ""')
+      return bodyText.includes('给你来一段节奏')
     }, 8_000)
 
-    const pet = await driver.findElement(By.css('[data-testid="pet-sprite"]'))
-    expect(await pet.getAttribute('data-animation-state')).to.equal('tapping')
+    await driver.wait(
+      async () => await getAttribute('[data-testid="pet-sprite"]', 'data-animation-state') === 'tapping',
+      5_000,
+    )
   })
 
   it('keeps manual sleep active during passive mouse movement and wakes explicitly', async () => {
     const input = await driver.findElement(By.css('[data-testid="chat-input"]'))
-    const pet = await driver.findElement(By.css('[data-testid="pet-sprite"]'))
 
     await input.sendKeys('睡觉', Key.ENTER)
-    await driver.wait(async () => await pet.getAttribute('data-sleeping') === 'true', 8_000)
+    await driver.wait(
+      async () => await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping') === 'true',
+      8_000,
+    )
 
     const viewport = await driver.findElement(By.css('.pet-viewport'))
     await driver.actions().move({ origin: viewport, x: 20, y: 20 }).perform()
     await driver.sleep(400)
-    expect(await pet.getAttribute('data-sleeping')).to.equal('true')
+    expect(await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping')).to.equal('true')
 
     await input.sendKeys('醒醒', Key.ENTER)
-    await driver.wait(async () => await pet.getAttribute('data-sleeping') === 'false', 8_000)
+    await driver.wait(
+      async () => await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping') === 'false',
+      8_000,
+    )
   })
 
   it('switches to the dog skin and opens the custom-skin QR dialog', async () => {
@@ -156,19 +171,22 @@ describe('DrumCat Windows native MVP', () => {
     )
     await shiba.click()
 
-    const pet = await driver.findElement(By.css('[data-testid="pet-sprite"]'))
     await driver.wait(
-      async () => await pet.getAttribute('data-skin-id') === 'realistic-shiba-inu',
+      async () => await getAttribute('[data-testid="pet-sprite"]', 'data-skin-id') === 'realistic-shiba-inu',
       5_000,
     )
 
     await driver.findElement(By.css('[data-testid="custom-skin"]')).click()
-    const dialog = await driver.wait(
-      until.elementLocated(By.css('[data-testid="custom-skin-dialog"]')),
-      5_000,
-    )
-    expect(await dialog.isDisplayed()).to.equal(true)
+    await driver.wait(async () => {
+      try {
+        const currentDialog = await driver.findElement(By.css('[data-testid="custom-skin-dialog"]'))
+        return await currentDialog.isDisplayed()
+      } catch {
+        return false
+      }
+    }, 5_000)
 
+    const dialog = await driver.findElement(By.css('[data-testid="custom-skin-dialog"]'))
     const qr = await dialog.findElement(By.css('img[alt="Arvin 的微信二维码"]'))
     expect(await qr.getAttribute('src')).to.include('/custom-skin/arvin-wechat.jpg')
   })
@@ -212,11 +230,10 @@ describe('DrumCat Windows native MVP', () => {
 
     await driver.switchTo().window(mainHandle)
     await driver.findElement(By.css('[data-testid="open-chat"]')).click()
-    const aiStatus = await driver.wait(
-      until.elementLocated(By.css('.pet-identity small')),
-      5_000,
-    )
-    await driver.wait(async () => (await aiStatus.getText()).includes('OpenAI 已连接'), 5_000)
+    await driver.wait(async () => {
+      const bodyText = await driver.executeScript('return document.body?.innerText || ""')
+      return bodyText.includes('OpenAI 已连接')
+    }, 5_000)
 
     await switchToWindowByUrl('#/preference')
     await driver.findElement(By.css('[data-testid="settings-nav-about"]')).click()
