@@ -30,7 +30,7 @@ SHA-256：
 - OpenAI、Anthropic Claude、Gemini、DeepSeek、通义千问、Kimi、智谱、硅基流动、OpenRouter、Azure、Ollama、LM Studio 和自定义兼容接口预设
 - 可配置桌宠名字、主人名字、长期职责、当前目标和偏好；这些信息会组成内置身份指令
 - API 请求通过 Rust 原生网络层发送并支持测试连接；密钥只在运行内存中跨窗口同步
-- 回复驱动动作、表情、语音朗读和睡眠
+- 回复驱动动作、表情、文字气泡和睡眠
 - 专注计时、自动休息、待办、定时提醒和原生系统通知
 - 陪伴、专注、安静、会议、游戏和直播 / OBS 模式
 - 可配置键鼠动作、主动消息上限和本地记忆
@@ -47,7 +47,7 @@ SHA-256：
 
 macOS 的跨应用键盘和鼠标互动需要在“系统设置 → 隐私与安全性 → 输入监控”中授权 DrumCat。Windows 安装包通过 GitHub Actions 的 Windows x64 环境完成原生编译、WebDriver UI 回归、NSIS 静默安装和安装后启动检查。
 
-远程自由对话和图片理解需要用户自行配置 API。DrumCat 原生支持 Anthropic Messages，并兼容 OpenAI Chat Completions 生态；其他兼容服务可填写完整接口地址、模型、协议和鉴权请求头。不开启 API 时，本地聊天、指令、番茄钟、提醒、任务、动作和全部桌面互动仍可使用。语音朗读使用系统 TTS；语音输入取决于系统 WebView 是否提供语音识别，本版不内置体积较大的离线识别模型。
+远程自由对话和图片理解需要用户自行配置 API。DrumCat 原生支持 Anthropic Messages，并兼容 OpenAI Chat Completions 生态；其他兼容服务可填写完整接口地址、模型、协议和鉴权请求头。不开启 API 时，本地聊天、指令、番茄钟、提醒、任务、动作和全部桌面互动仍可使用。所有提醒只通过文字气泡与系统文字通知呈现。
 
 ## 默认快捷键
 

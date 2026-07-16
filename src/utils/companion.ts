@@ -694,14 +694,3 @@ export async function streamCompanionReply(options: StreamCompanionOptions): Pro
 
   return streamBrowserAiReply(request, options.onDelta, options.signal)
 }
-
-export function speakText(content: string) {
-  if (!('speechSynthesis' in window)) return
-
-  window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(content)
-  utterance.lang = 'zh-CN'
-  utterance.rate = 1.02
-  utterance.pitch = 1.08
-  window.speechSynthesis.speak(utterance)
-}

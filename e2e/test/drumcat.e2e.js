@@ -1,6 +1,6 @@
 import { expect } from 'chai'
 import { after, before, describe, it } from 'mocha'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -23,6 +23,63 @@ let driver
 let initialPetWindowRect
 let tauriDriver
 let shuttingDown = false
+
+function delay(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
+function stopNativeApp() {
+  if (process.platform !== 'win32') return
+
+  spawnSync('taskkill', ['/F', '/IM', 'drum-cat.exe'], {
+    stdio: 'ignore',
+  })
+}
+
+function startTauriDriver() {
+  const driverName = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver'
+  const child = spawn(path.join(os.homedir(), '.cargo', 'bin', driverName), [], {
+    stdio: ['ignore', 'inherit', 'inherit'],
+  })
+
+  child.on('error', error => console.error('Unable to start tauri-driver:', error))
+  child.on('exit', (code) => {
+    if (!shuttingDown && code !== null) {
+      console.error(`tauri-driver exited unexpectedly with code ${code}`)
+    }
+  })
+
+  return child
+}
+
+async function createDriverSession(capabilities) {
+  let lastError
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    tauriDriver = startTauriDriver()
+    await delay(1_000)
+
+    try {
+      return await new Builder()
+        .withCapabilities(capabilities)
+        .usingServer('http://127.0.0.1:4444/')
+        .build()
+    } catch (error) {
+      lastError = error
+      tauriDriver.removeAllListeners()
+      tauriDriver.kill()
+      tauriDriver = undefined
+      stopNativeApp()
+
+      if (attempt < 3) {
+        console.warn(`WebDriver session attempt ${attempt} failed; retrying...`)
+        await delay(1_500)
+      }
+    }
+  }
+
+  throw lastError
+}
 
 async function switchToWindowByUrl(fragment, timeoutMs = 10_000) {
   const startedAt = Date.now()
@@ -52,34 +109,17 @@ async function getAttribute(selector, attribute) {
 }
 
 before(async function () {
-  this.timeout(120_000)
+  this.timeout(300_000)
 
   if (!existsSync(application)) {
     throw new Error(`DrumCat binary does not exist: ${application}`)
   }
 
-  const driverName = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver'
-  tauriDriver = spawn(path.join(os.homedir(), '.cargo', 'bin', driverName), [], {
-    stdio: ['ignore', 'inherit', 'inherit'],
-  })
-
-  tauriDriver.on('error', (error) => {
-    throw error
-  })
-  tauriDriver.on('exit', (code) => {
-    if (!shuttingDown && code !== null) {
-      console.error(`tauri-driver exited unexpectedly with code ${code}`)
-    }
-  })
-
   const capabilities = new Capabilities()
   capabilities.set('tauri:options', { application })
   capabilities.setBrowserName('wry')
 
-  driver = await new Builder()
-    .withCapabilities(capabilities)
-    .usingServer('http://127.0.0.1:4444/')
-    .build()
+  driver = await createDriverSession(capabilities)
 })
 
 after(async () => {
@@ -89,6 +129,7 @@ after(async () => {
     await driver?.quit()
   } finally {
     tauriDriver?.kill()
+    stopNativeApp()
   }
 })
 

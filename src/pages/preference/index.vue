@@ -690,19 +690,7 @@ async function openLogDirectory() {
 
         <section class="settings-card">
           <div class="card-heading">
-            <div><h2>语音与图片权限</h2><p>默认关闭，只有你主动开启后聊天面板才会读取。</p></div>
-          </div>
-          <div class="setting-row">
-            <div><strong>语音输入</strong><small>依赖系统 WebView；不支持时会明确提示，不随 MVP 打包大型离线模型</small></div><label class="switch"><input
-              v-model="companionStore.privacy.voiceInput"
-              type="checkbox"
-            ><span /></label>
-          </div>
-          <div class="setting-row">
-            <div><strong>语音朗读</strong><small>使用系统语音朗读桌宠回复</small></div><label class="switch"><input
-              v-model="companionStore.privacy.voiceOutput"
-              type="checkbox"
-            ><span /></label>
+            <div><h2>图片权限</h2><p>默认关闭，只有你主动开启后聊天面板才会读取手动选择的图片。</p></div>
           </div>
           <div class="setting-row">
             <div><strong>图片理解</strong><small>允许读取你手动拖入聊天框的图片</small></div><label class="switch"><input
@@ -930,7 +918,7 @@ async function openLogDirectory() {
         </section>
         <section class="settings-card privacy-summary">
           <span class="i-solar:lock-keyhole-minimalistic-bold" />
-          <div><h2>隐私默认优先</h2><p>聊天、任务和偏好保存在本机；API 密钥不落盘；语音、图片和远程 AI 默认关闭。直播模式不会把私人备忘放进模型上下文。</p></div>
+          <div><h2>隐私默认优先</h2><p>聊天、任务和偏好保存在本机；API 密钥不落盘；图片和远程 AI 默认关闭。提醒只通过文字气泡与系统文字通知呈现。</p></div>
         </section>
       </div>
     </section>

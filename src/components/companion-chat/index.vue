@@ -1,28 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import type { ChatSendPayload, CompanionAction, CompanionMessage } from '@/utils/companion'
 
 import { MODE_OPTIONS, useCompanionStore } from '@/stores/companion'
 import { usePetStore } from '@/stores/pet'
 import { getAiProviderPreset } from '@/utils/companion'
-
-interface SpeechResultEvent {
-  results: ArrayLike<{ 0: { transcript: string } }>
-}
-
-interface SpeechRecognitionLike {
-  continuous: boolean
-  interimResults: boolean
-  lang: string
-  onend: (() => void) | null
-  onerror: (() => void) | null
-  onresult: ((event: SpeechResultEvent) => void) | null
-  start: () => void
-  stop: () => void
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
 const props = withDefaults(defineProps<{
   aiReady?: boolean
@@ -49,8 +32,6 @@ const selectedImage = ref<ChatSendPayload['image']>()
 const attachmentError = ref('')
 const messagesRef = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement>()
-const listening = ref(false)
-let recognition: SpeechRecognitionLike | undefined
 
 const quickPrompts = ['给我加油', '敲鼓给我听', '帮我拆下一步']
 const focusTime = computed(() => {
@@ -74,14 +55,6 @@ const aiStatusLabel = computed(() => {
   return `${getAiProviderPreset(companionStore.ai.provider).name} 已连接`
 })
 
-const speechConstructor = computed<SpeechRecognitionConstructor | undefined>(() => {
-  const speechWindow = window as typeof window & {
-    SpeechRecognition?: SpeechRecognitionConstructor
-    webkitSpeechRecognition?: SpeechRecognitionConstructor
-  }
-  return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
-})
-
 watch(() => props.messages.length, async () => {
   await nextTick()
   messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
@@ -92,8 +65,6 @@ watch(activeTab, async (tab) => {
   await nextTick()
   messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight })
 })
-
-onBeforeUnmount(() => recognition?.stop())
 
 function submit() {
   const value = draft.value.trim()
@@ -194,49 +165,6 @@ async function loadImage(file: File) {
   } catch {
     selectedImage.value = undefined
     attachmentError.value = '图片读取失败，请重新选择文件。'
-  }
-}
-
-function toggleVoiceInput() {
-  if (listening.value) {
-    recognition?.stop()
-    return
-  }
-  if (!companionStore.privacy.voiceInput) {
-    attachmentError.value = '请先在设置中开启语音输入权限。'
-    return
-  }
-  if (!speechConstructor.value) {
-    attachmentError.value = '当前系统 WebView 不支持语音识别。'
-    return
-  }
-
-  const SpeechRecognition = speechConstructor.value
-  recognition = new SpeechRecognition()
-  recognition.lang = 'zh-CN'
-  recognition.continuous = false
-  recognition.interimResults = false
-  recognition.onresult = (event) => {
-    const transcript = Array.from(event.results)
-      .map(result => result[0]?.transcript || '')
-      .join('')
-    draft.value = `${draft.value}${transcript}`
-  }
-  recognition.onerror = () => {
-    listening.value = false
-    attachmentError.value = '没有听清楚，请再试一次。'
-  }
-  recognition.onend = () => {
-    listening.value = false
-  }
-  listening.value = true
-
-  try {
-    recognition.start()
-  } catch {
-    listening.value = false
-    recognition = undefined
-    attachmentError.value = '语音输入启动失败，请检查系统权限后重试。'
   }
 }
 </script>
@@ -404,15 +332,6 @@ function toggleVoiceInput() {
               @click="chooseImage"
             >
               <span class="i-solar:gallery-add-bold" />
-            </button>
-            <button
-              :aria-pressed="listening"
-              :class="{ active: listening, disabled: !companionStore.privacy.voiceInput || !speechConstructor }"
-              :title="speechConstructor ? '语音输入' : '当前系统不支持语音输入'"
-              type="button"
-              @click="toggleVoiceInput"
-            >
-              <span class="i-solar:microphone-3-bold" />
             </button>
           </div>
 

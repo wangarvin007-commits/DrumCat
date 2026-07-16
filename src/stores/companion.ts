@@ -117,8 +117,6 @@ export const useCompanionStore = defineStore('companion', () => {
     keyboardInteraction: true,
     mouseInteraction: true,
     systemNotifications: true,
-    voiceInput: false,
-    voiceOutput: false,
     imageUnderstanding: false,
   })
 

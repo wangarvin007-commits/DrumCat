@@ -35,7 +35,6 @@ import {
   createMessage,
   getCompanionSystemPrompt,
   parseDirectCommand,
-  speakText,
   streamCompanionReply,
 } from '@/utils/companion'
 import { sendSystemNotification } from '@/utils/notification'
@@ -236,10 +235,6 @@ function presentAssistantMessage(
 
   petStore.reactToCompanion(action, emotion)
   showBubble(content)
-
-  if (companionStore.privacy.voiceOutput && companionStore.mode !== 'meeting') {
-    speakText(content)
-  }
 }
 
 function inferPresentation(content: string): { action: CompanionAction, emotion: CompanionEmotion } {
@@ -355,7 +350,6 @@ async function handleSendMessage(payload: ChatSendPayload) {
       companionStore.updateMessage(placeholder.id, reply, presentation)
       petStore.reactToCompanion(presentation.action, presentation.emotion)
       showBubble(reply)
-      if (companionStore.privacy.voiceOutput && companionStore.mode !== 'meeting') speakText(reply)
     } catch (error) {
       const fallback = createCompanionReply(content, getCompanionContext())
       const detail = error instanceof Error ? error.message : String(error)
@@ -364,7 +358,6 @@ async function handleSendMessage(payload: ChatSendPayload) {
       companionStore.updateMessage(placeholder.id, reply, fallback)
       petStore.reactToCompanion(fallback.action, fallback.emotion)
       showBubble(reply)
-      if (companionStore.privacy.voiceOutput && companionStore.mode !== 'meeting') speakText(reply)
     } finally {
       chatAbortController = undefined
       chatBusy.value = false

@@ -88,6 +88,20 @@ jobs:
       - name: Run Windows native UI tests
         run: pnpm --dir e2e test
 
+      - name: Collect Windows UI diagnostics
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process -Name "drum-cat", "tauri-driver", "msedgedriver" -ErrorAction SilentlyContinue |
+            Format-Table Id, ProcessName, Responding, StartTime
+
+          $logs = Get-ChildItem $env:LOCALAPPDATA, $env:APPDATA -Filter "DrumCat.log" -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 4
+          foreach ($log in $logs) {
+            Write-Host "==== $($log.FullName)"
+            Get-Content $log.FullName -Tail 120
+          }
+
       - name: Smoke-test silent installer and installed app
         shell: pwsh
         run: |

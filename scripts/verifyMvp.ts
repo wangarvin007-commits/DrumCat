@@ -468,9 +468,13 @@ await check('键盘、鼠标、拖动缩放、托盘和快捷键调用链存在'
   assert.match(shortcuts, /penetrable/u)
 })
 
-await check('提醒、AI 回退、会议静音和开机启动调用链已接通', () => {
+await check('文字气泡、系统文字通知、AI 回退和开机启动调用链已接通', () => {
   const main = readFileSync(join(root, 'src', 'pages', 'main', 'index.vue'), 'utf8')
   const app = readFileSync(join(root, 'src', 'App.vue'), 'utf8')
+  const chat = readFileSync(join(root, 'src', 'components', 'companion-chat', 'index.vue'), 'utf8')
+  const companionStore = readFileSync(join(root, 'src', 'stores', 'companion.ts'), 'utf8')
+  const companionUtils = readFileSync(join(root, 'src', 'utils', 'companion.ts'), 'utf8')
+  const preferences = readFileSync(join(root, 'src', 'pages', 'preference', 'index.vue'), 'utf8')
   const capabilities = JSON.parse(readFileSync(join(root, 'src-tauri', 'capabilities', 'default.json'), 'utf8'))
   const macWindow = readFileSync(
     join(root, 'src-tauri', 'src', 'plugins', 'window', 'src', 'commands', 'macos.rs'),
@@ -479,7 +483,11 @@ await check('提醒、AI 回退、会议静音和开机启动调用链已接通'
 
   assert.match(main, /sendSystemNotification/u)
   assert.match(main, /showBubble\(reply\)/u)
-  assert.match(main, /mode !== 'meeting'/u)
+  assert.match(preferences, /提醒只通过文字气泡与系统文字通知呈现/u)
+  assert.doesNotMatch(chat, /SpeechRecognition|microphone/u)
+  assert.doesNotMatch(companionStore, /voiceInput|voiceOutput/u)
+  assert.doesNotMatch(companionUtils, /speechSynthesis|SpeechSynthesisUtterance|speakText/u)
+  assert.doesNotMatch(preferences, /语音/u)
   assert.match(app, /syncAutostart/u)
   assert(capabilities.permissions.includes('notification:default'))
   assert.match(macWindow, /PanelLevel::Normal/u)
