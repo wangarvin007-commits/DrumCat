@@ -135,8 +135,8 @@ describe('DrumCat Windows native MVP', () => {
       8_000,
     )
 
-    const viewport = await driver.findElement(By.css('.pet-viewport'))
-    await driver.actions().move({ origin: viewport, x: 20, y: 20 }).perform()
+    const panel = await driver.findElement(By.css('[data-testid="companion-panel"]'))
+    await driver.actions().move({ origin: panel, x: 20, y: 20 }).perform()
     await driver.sleep(400)
     expect(await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping')).to.equal('true')
 
@@ -192,7 +192,11 @@ describe('DrumCat Windows native MVP', () => {
   })
 
   it('syncs the memory-only AI key across windows and hides source rows', async () => {
-    await driver.findElement(By.css('[aria-label="关闭定制皮肤二维码"]')).click()
+    const closeDialog = await driver.findElement(By.css('[aria-label="关闭定制皮肤二维码"]'))
+    await closeDialog.click()
+    await driver.wait(async () => (
+      await driver.findElements(By.css('[data-testid="custom-skin-dialog"]'))
+    ).length === 0, 5_000)
     await driver.findElement(By.css('[aria-label="关闭皮肤选择"]')).click()
 
     const mainHandle = await driver.getWindowHandle()
