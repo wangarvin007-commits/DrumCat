@@ -1,289 +1,194 @@
-import { expect } from 'chai'
-import { after, before, describe, it } from 'mocha'
-import { spawn, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import process from 'node:process'
-import { fileURLToPath } from 'node:url'
-import { Builder, By, Capabilities, Key, until } from 'selenium-webdriver'
+/* global describe, it */
 
-const testDirectory = path.dirname(fileURLToPath(import.meta.url))
-const application = process.env.DRUMCAT_BINARY
-  || path.resolve(
-    testDirectory,
-    '..',
-    '..',
-    'target',
-    'release',
-    process.platform === 'win32' ? 'drum-cat.exe' : 'drum-cat',
-  )
+import { $, $$, browser } from '@wdio/globals'
+import assert from 'node:assert/strict'
 
-let driver
 let initialPetWindowRect
-let tauriDriver
-let shuttingDown = false
 
-function delay(milliseconds) {
-  return new Promise(resolve => setTimeout(resolve, milliseconds))
-}
-
-function stopNativeApp() {
-  if (process.platform !== 'win32') return
-
-  spawnSync('taskkill', ['/F', '/IM', 'drum-cat.exe'], {
-    stdio: 'ignore',
-  })
-}
-
-function startTauriDriver() {
-  const driverName = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver'
-  const child = spawn(path.join(os.homedir(), '.cargo', 'bin', driverName), [], {
-    stdio: ['ignore', 'inherit', 'inherit'],
-  })
-
-  child.on('error', error => console.error('Unable to start tauri-driver:', error))
-  child.on('exit', (code) => {
-    if (!shuttingDown && code !== null) {
-      console.error(`tauri-driver exited unexpectedly with code ${code}`)
-    }
-  })
-
-  return child
-}
-
-async function createDriverSession(capabilities) {
-  let lastError
-
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    tauriDriver = startTauriDriver()
-    await delay(1_000)
-
-    try {
-      return await new Builder()
-        .withCapabilities(capabilities)
-        .usingServer('http://127.0.0.1:4444/')
-        .build()
-    } catch (error) {
-      lastError = error
-      tauriDriver.removeAllListeners()
-      tauriDriver.kill()
-      tauriDriver = undefined
-      stopNativeApp()
-
-      if (attempt < 3) {
-        console.warn(`WebDriver session attempt ${attempt} failed; retrying...`)
-        await delay(1_500)
-      }
-    }
-  }
-
-  throw lastError
+async function getAttribute(selector, attribute) {
+  const elements = await $$(selector)
+  if (elements.length === 0) return null
+  return elements[0].getAttribute(attribute)
 }
 
 async function switchToWindowByUrl(fragment, timeoutMs = 10_000) {
-  const startedAt = Date.now()
+  let matchingHandle
 
-  while (Date.now() - startedAt < timeoutMs) {
-    const handles = await driver.getAllWindowHandles()
+  await browser.waitUntil(async () => {
+    const handles = await browser.getWindowHandles()
 
     for (const handle of handles) {
-      await driver.switchTo().window(handle)
+      await browser.switchToWindow(handle)
 
-      if ((await driver.getCurrentUrl()).includes(fragment)) return handle
+      if ((await browser.getUrl()).includes(fragment)) {
+        matchingHandle = handle
+        return true
+      }
     }
 
-    await driver.sleep(200)
-  }
+    return false
+  }, {
+    timeout: timeoutMs,
+    timeoutMsg: `Unable to find window URL containing: ${fragment}`,
+  })
 
-  throw new Error(`Unable to find window URL containing: ${fragment}`)
+  return matchingHandle
 }
 
-async function getAttribute(selector, attribute) {
-  try {
-    const element = await driver.findElement(By.css(selector))
-    return await element.getAttribute(attribute)
-  } catch {
-    return null
-  }
+async function enterTextCommand(input, text) {
+  await input.click()
+  await input.setValue(text)
+  await browser.keys('Enter')
 }
-
-before(async function () {
-  this.timeout(300_000)
-
-  if (!existsSync(application)) {
-    throw new Error(`DrumCat binary does not exist: ${application}`)
-  }
-
-  const capabilities = new Capabilities()
-  capabilities.set('tauri:options', { application })
-  capabilities.setBrowserName('wry')
-
-  driver = await createDriverSession(capabilities)
-})
-
-after(async () => {
-  shuttingDown = true
-
-  try {
-    await driver?.quit()
-  } finally {
-    tauriDriver?.kill()
-    stopNativeApp()
-  }
-})
 
 describe('DrumCat Windows native MVP', () => {
-  it('opens the local chat and drives a reply animation', async () => {
-    const viewport = await driver.wait(until.elementLocated(By.css('.pet-viewport')), 30_000)
-    await driver.actions().move({ origin: viewport }).perform()
-    initialPetWindowRect = await driver.manage().window().getRect()
+  it('opens the text-only local chat and drives a reply animation', async () => {
+    const viewport = await $('.pet-viewport')
+    await viewport.waitForDisplayed({ timeout: 30_000 })
+    await viewport.moveTo()
+    initialPetWindowRect = await browser.getWindowRect()
 
-    const chatButton = await driver.findElement(By.css('[data-testid="open-chat"]'))
-    await driver.wait(until.elementIsVisible(chatButton), 5_000)
+    const chatButton = await $('[data-testid="open-chat"]')
+    await chatButton.waitForDisplayed({ timeout: 5_000 })
     await chatButton.click()
 
-    await driver.wait(until.elementLocated(By.css('[data-testid="companion-panel"]')), 5_000)
-    await driver.wait(async () => {
-      const panelRect = await driver.manage().window().getRect()
+    const panel = await $('[data-testid="companion-panel"]')
+    await panel.waitForExist({ timeout: 5_000 })
+    await browser.waitUntil(async () => {
+      const panelRect = await browser.getWindowRect()
       return panelRect.width > initialPetWindowRect.width && panelRect.width <= 500
-    }, 5_000)
+    }, { timeout: 5_000 })
 
-    const panelWindowRect = await driver.manage().window().getRect()
-    expect(panelWindowRect.width).to.be.within(350, 500)
-    expect(panelWindowRect.height).to.be.within(480, 560)
+    const panelWindowRect = await browser.getWindowRect()
+    assert(panelWindowRect.width >= 350 && panelWindowRect.width <= 500)
+    assert(panelWindowRect.height >= 480 && panelWindowRect.height <= 560)
 
-    const input = await driver.findElement(By.css('[data-testid="chat-input"]'))
-    await input.sendKeys('敲鼓给我听', Key.ENTER)
+    const voiceControlCount = await browser.execute(() => (
+      Array.from(document.querySelectorAll('button')).filter((button) => {
+        const label = [
+          button.textContent,
+          button.getAttribute('title'),
+          button.getAttribute('aria-label'),
+        ].filter(Boolean).join(' ')
+        return /语音|朗读|麦克风/u.test(label)
+      }).length
+    ))
+    assert.equal(voiceControlCount, 0)
 
-    await driver.wait(async () => {
-      const bodyText = await driver.executeScript('return document.body?.innerText || ""')
+    const input = await $('[data-testid="chat-input"]')
+    await enterTextCommand(input, '敲鼓给我听')
+
+    await browser.waitUntil(async () => {
+      const bodyText = await browser.execute(() => document.body?.textContent || '')
       return bodyText.includes('给你来一段节奏')
-    }, 8_000)
+    }, { timeout: 8_000 })
 
-    await driver.wait(
+    await browser.waitUntil(
       async () => await getAttribute('[data-testid="pet-sprite"]', 'data-animation-state') === 'tapping',
-      5_000,
+      { timeout: 5_000 },
     )
   })
 
   it('keeps manual sleep active during passive mouse movement and wakes explicitly', async () => {
-    const input = await driver.findElement(By.css('[data-testid="chat-input"]'))
+    const input = await $('[data-testid="chat-input"]')
 
-    await input.sendKeys('睡觉', Key.ENTER)
-    await driver.wait(
+    await enterTextCommand(input, '睡觉')
+    await browser.waitUntil(
       async () => await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping') === 'true',
-      8_000,
+      { timeout: 8_000 },
     )
 
-    const panel = await driver.findElement(By.css('[data-testid="companion-panel"]'))
-    await driver.actions().move({ origin: panel, x: 20, y: 20 }).perform()
-    await driver.sleep(400)
-    expect(await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping')).to.equal('true')
+    const panel = await $('[data-testid="companion-panel"]')
+    await panel.moveTo({ xOffset: 20, yOffset: 20 })
+    await browser.pause(400)
+    assert.equal(await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping'), 'true')
 
-    await input.sendKeys('醒醒', Key.ENTER)
-    await driver.wait(
+    await enterTextCommand(input, '醒醒')
+    await browser.waitUntil(
       async () => await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping') === 'false',
-      8_000,
+      { timeout: 8_000 },
     )
   })
 
   it('switches to the dog skin and opens the custom-skin QR dialog', async () => {
-    const closeButton = await driver.findElement(By.css('[aria-label="关闭陪伴面板"]'))
-    await closeButton.click()
-    await driver.wait(async () => {
-      const restoredRect = await driver.manage().window().getRect()
+    await $('[aria-label="关闭陪伴面板"]').click()
+    await browser.waitUntil(async () => {
+      const restoredRect = await browser.getWindowRect()
       return restoredRect.width <= 360 && restoredRect.height <= 390
-    }, 5_000)
-    const restoredRect = await driver.manage().window().getRect()
-    expect(Math.abs(restoredRect.x - initialPetWindowRect.x)).to.be.at.most(4)
-    expect(Math.abs(restoredRect.y - initialPetWindowRect.y)).to.be.at.most(4)
+    }, { timeout: 5_000 })
 
-    const viewport = await driver.findElement(By.css('.pet-viewport'))
-    await driver.actions().move({ origin: viewport }).perform()
+    const restoredRect = await browser.getWindowRect()
+    assert(Math.abs(restoredRect.x - initialPetWindowRect.x) <= 4)
+    assert(Math.abs(restoredRect.y - initialPetWindowRect.y) <= 4)
 
-    const skinsButton = await driver.findElement(By.css('[data-testid="open-skins"]'))
-    await driver.wait(until.elementIsVisible(skinsButton), 5_000)
+    const viewport = await $('.pet-viewport')
+    await viewport.moveTo()
+
+    const skinsButton = await $('[data-testid="open-skins"]')
+    await skinsButton.waitForDisplayed({ timeout: 5_000 })
     await skinsButton.click()
 
-    const shiba = await driver.wait(
-      until.elementLocated(By.css('[data-skin-id="realistic-shiba-inu"]')),
-      5_000,
-    )
+    const shiba = await $('[data-skin-id="realistic-shiba-inu"]')
+    await shiba.waitForExist({ timeout: 5_000 })
     await shiba.click()
 
-    await driver.wait(
+    await browser.waitUntil(
       async () => await getAttribute('[data-testid="pet-sprite"]', 'data-skin-id') === 'realistic-shiba-inu',
-      5_000,
+      { timeout: 5_000 },
     )
 
-    await driver.findElement(By.css('[data-testid="custom-skin"]')).click()
-    await driver.wait(async () => {
-      try {
-        const currentDialog = await driver.findElement(By.css('[data-testid="custom-skin-dialog"]'))
-        return await currentDialog.isDisplayed()
-      } catch {
-        return false
-      }
-    }, 5_000)
+    await $('[data-testid="custom-skin"]').click()
+    const dialog = await $('[data-testid="custom-skin-dialog"]')
+    await dialog.waitForDisplayed({ timeout: 5_000 })
 
-    const dialog = await driver.findElement(By.css('[data-testid="custom-skin-dialog"]'))
-    const qr = await dialog.findElement(By.css('img[alt="Arvin 的微信二维码"]'))
-    expect(await qr.getAttribute('src')).to.include('/custom-skin/arvin-wechat.jpg')
+    const qr = await dialog.$('img[alt="Arvin 的微信二维码"]')
+    assert((await qr.getAttribute('src')).includes('/custom-skin/arvin-wechat.jpg'))
   })
 
-  it('syncs the memory-only AI key across windows and hides source rows', async () => {
-    const closeDialog = await driver.findElement(By.css('[aria-label="关闭定制皮肤二维码"]'))
-    await closeDialog.click()
-    await driver.wait(async () => (
-      await driver.findElements(By.css('[data-testid="custom-skin-dialog"]'))
-    ).length === 0, 5_000)
-    await driver.findElement(By.css('[aria-label="关闭皮肤选择"]')).click()
+  it('syncs the memory-only AI key across windows and hides source and voice rows', async () => {
+    await $('[aria-label="关闭定制皮肤二维码"]').click()
+    await browser.waitUntil(
+      async () => (await $$('[data-testid="custom-skin-dialog"]')).length === 0,
+      { timeout: 5_000 },
+    )
+    await $('[aria-label="关闭皮肤选择"]').click()
 
-    const mainHandle = await driver.getWindowHandle()
-    const viewport = await driver.findElement(By.css('.pet-viewport'))
-    await driver.actions().move({ origin: viewport }).perform()
+    const mainHandle = await browser.getWindowHandle()
+    const viewport = await $('.pet-viewport')
+    await viewport.moveTo()
 
-    const settingsButton = await driver.findElement(By.css('[data-testid="open-settings"]'))
-    await driver.wait(until.elementIsVisible(settingsButton), 5_000)
+    const settingsButton = await $('[data-testid="open-settings"]')
+    await settingsButton.waitForDisplayed({ timeout: 5_000 })
     await settingsButton.click()
 
     await switchToWindowByUrl('#/preference')
-    await driver.wait(until.elementLocated(By.css('[data-testid="settings-nav-companion"]')), 8_000)
-    await driver.findElement(By.css('[data-testid="settings-nav-companion"]')).click()
+    const companionNav = await $('[data-testid="settings-nav-companion"]')
+    await companionNav.waitForExist({ timeout: 8_000 })
+    await companionNav.click()
 
-    const enabled = await driver.findElement(By.css('[data-testid="ai-enabled"]'))
+    const enabled = await $('[data-testid="ai-enabled"]')
     if (!await enabled.isSelected()) await enabled.click()
 
-    const provider = await driver.findElement(By.css('[data-testid="ai-provider"]'))
-    await driver.executeScript(`
-      const select = arguments[0]
-      select.value = 'openai'
-      select.dispatchEvent(new Event('change', { bubbles: true }))
-    `, provider)
+    await $('[data-testid="ai-provider"]').selectByAttribute('value', 'openai')
+    await $('[data-testid="companion-name"]').setValue('小鼓')
+    await $('[data-testid="owner-name"]').setValue('Arvin')
+    await $('[data-testid="ai-session-key"]').setValue('memory-only-test-key')
 
-    const companionName = await driver.findElement(By.css('[data-testid="companion-name"]'))
-    await companionName.clear()
-    await companionName.sendKeys('小鼓')
+    const companionSettingsText = await $('body').getText()
+    assert(!companionSettingsText.includes('语音输入'))
+    assert(!companionSettingsText.includes('语音朗读'))
 
-    const ownerName = await driver.findElement(By.css('[data-testid="owner-name"]'))
-    await ownerName.clear()
-    await ownerName.sendKeys('Arvin')
-
-    const apiKey = await driver.findElement(By.css('[data-testid="ai-session-key"]'))
-    await apiKey.sendKeys('memory-only-test-key')
-
-    await driver.switchTo().window(mainHandle)
-    await driver.findElement(By.css('[data-testid="open-chat"]')).click()
-    await driver.wait(async () => {
-      const bodyText = await driver.executeScript('return document.body?.innerText || ""')
+    await browser.switchToWindow(mainHandle)
+    await $('[data-testid="open-chat"]').click()
+    await browser.waitUntil(async () => {
+      const bodyText = await browser.execute(() => document.body?.textContent || '')
       return bodyText.includes('OpenAI 已连接')
-    }, 5_000)
+    }, { timeout: 5_000 })
 
     await switchToWindowByUrl('#/preference')
-    await driver.findElement(By.css('[data-testid="settings-nav-about"]')).click()
-    const bodyText = await driver.findElement(By.css('body')).getText()
-    expect(bodyText).not.to.include('项目源码')
-    expect(bodyText).not.to.include('技术底座')
+    await $('[data-testid="settings-nav-about"]').click()
+    const bodyText = await $('body').getText()
+    assert(!bodyText.includes('项目源码'))
+    assert(!bodyText.includes('技术底座'))
   })
 })
