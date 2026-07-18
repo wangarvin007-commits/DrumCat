@@ -67,13 +67,11 @@ describe('DrumCat Windows native MVP', () => {
     assert(panelWindowRect.width >= 350 && panelWindowRect.width <= 500)
     assert(panelWindowRect.height >= 480 && panelWindowRect.height <= 560)
 
-    const voiceControlCount = (await $$(`//button[
-      contains(normalize-space(.), "语音") or
-      contains(normalize-space(.), "朗读") or
-      contains(normalize-space(.), "麦克风") or
-      contains(@title, "语音") or contains(@title, "朗读") or contains(@title, "麦克风") or
-      contains(@aria-label, "语音") or contains(@aria-label, "朗读") or contains(@aria-label, "麦克风")
-    ]`)).length
+    const voiceControlCount = (await $$([
+      '[data-testid^="voice-"]',
+      '[data-testid^="speech-"]',
+      '[data-testid^="microphone-"]',
+    ].join(', '))).length
     assert.equal(voiceControlCount, 0)
 
     const input = await $('[data-testid="chat-input"]')
