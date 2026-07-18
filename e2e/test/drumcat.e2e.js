@@ -129,7 +129,7 @@ describe('DrumCat Windows native MVP', () => {
     logStep('pet window position and size were restored')
   })
 
-  it('switches to the dog skin', async () => {
+  it('opens the skin picker', async () => {
     const viewport = await $('.pet-viewport')
     await viewport.moveTo()
 
@@ -139,6 +139,11 @@ describe('DrumCat Windows native MVP', () => {
 
     const shiba = await $('[data-skin-id="realistic-shiba-inu"]')
     await shiba.waitForExist({ timeout: 5_000 })
+    logStep('skin picker is visible')
+  })
+
+  it('switches to the dog skin', async () => {
+    const shiba = await $('[data-skin-id="realistic-shiba-inu"]')
     await shiba.click()
 
     await browser.waitUntil(
