@@ -67,23 +67,20 @@ describe('DrumCat Windows native MVP', () => {
     assert(panelWindowRect.width >= 350 && panelWindowRect.width <= 500)
     assert(panelWindowRect.height >= 480 && panelWindowRect.height <= 560)
 
-    const voiceControlCount = await browser.execute(() => (
-      Array.from(document.querySelectorAll('button')).filter((button) => {
-        const label = [
-          button.textContent,
-          button.getAttribute('title'),
-          button.getAttribute('aria-label'),
-        ].filter(Boolean).join(' ')
-        return /语音|朗读|麦克风/u.test(label)
-      }).length
-    ))
+    const voiceControlCount = (await $$(`//button[
+      contains(normalize-space(.), "语音") or
+      contains(normalize-space(.), "朗读") or
+      contains(normalize-space(.), "麦克风") or
+      contains(@title, "语音") or contains(@title, "朗读") or contains(@title, "麦克风") or
+      contains(@aria-label, "语音") or contains(@aria-label, "朗读") or contains(@aria-label, "麦克风")
+    ]`)).length
     assert.equal(voiceControlCount, 0)
 
     const input = await $('[data-testid="chat-input"]')
     await enterTextCommand(input, '敲鼓给我听')
 
     await browser.waitUntil(async () => {
-      const bodyText = await browser.execute(() => document.body?.textContent || '')
+      const bodyText = await $('body').getText()
       return bodyText.includes('给你来一段节奏')
     }, { timeout: 8_000 })
 
@@ -171,7 +168,10 @@ describe('DrumCat Windows native MVP', () => {
     await companionNav.click()
 
     const enabled = await $('[data-testid="ai-enabled"]')
-    if (!await enabled.isSelected()) await enabled.click()
+    if (!await enabled.isSelected()) {
+      await $('//input[@data-testid="ai-enabled"]/following-sibling::span').click()
+      await browser.waitUntil(() => enabled.isSelected(), { timeout: 5_000 })
+    }
 
     await $('[data-testid="ai-provider"]').selectByAttribute('value', 'openai')
     await $('[data-testid="companion-name"]').setValue('小鼓')
@@ -185,7 +185,7 @@ describe('DrumCat Windows native MVP', () => {
     await browser.switchToWindow(mainHandle)
     await $('[data-testid="open-chat"]').click()
     await browser.waitUntil(async () => {
-      const bodyText = await browser.execute(() => document.body?.textContent || '')
+      const bodyText = await $('body').getText()
       return bodyText.includes('OpenAI 已连接')
     }, { timeout: 5_000 })
 
