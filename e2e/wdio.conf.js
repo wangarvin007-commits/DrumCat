@@ -17,13 +17,11 @@ if (!existsSync(appBinaryPath)) {
   throw new Error(`DrumCat binary does not exist: ${appBinaryPath}`)
 }
 
-const windowsWebViewCapabilities = process.platform === 'win32'
+const windowsWebViewOptions = process.platform === 'win32'
   ? {
-      'ms:edgeOptions': {
-        webviewOptions: {
-          userDataFolder: process.env.DRUMCAT_WEBDRIVER_USER_DATA_DIR
-            || path.join(process.env.RUNNER_TEMP || process.env.TEMP || directory, 'drumcat-wdio-webview2'),
-        },
+      webviewOptions: {
+        userDataFolder: process.env.DRUMCAT_WEBDRIVER_USER_DATA_DIR
+          || path.join(process.env.RUNNER_TEMP || process.env.TEMP || directory, 'drumcat-wdio-webview2'),
       },
     }
   : {}
@@ -34,9 +32,9 @@ export const config = {
   maxInstances: 1,
   capabilities: [{
     'browserName': 'tauri',
-    ...windowsWebViewCapabilities,
     'tauri:options': {
       application: appBinaryPath,
+      ...windowsWebViewOptions,
     },
     'wdio:tauriServiceOptions': {
       appBinaryPath,

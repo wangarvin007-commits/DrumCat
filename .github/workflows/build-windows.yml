@@ -124,6 +124,19 @@ jobs:
           Get-Process -Name "drum-cat", "tauri-driver", "msedgedriver" -ErrorAction SilentlyContinue |
             Format-Table Id, ProcessName, Responding, StartTime
 
+          $activePorts = Get-ChildItem $env:DRUMCAT_WEBDRIVER_USER_DATA_DIR -Filter "DevToolsActivePort" -Recurse -Force -ErrorAction SilentlyContinue
+          if ($activePorts) {
+            foreach ($activePort in $activePorts) {
+              Write-Host "==== $($activePort.FullName)"
+              Get-Content $activePort.FullName -ErrorAction SilentlyContinue
+            }
+          }
+          else {
+            Write-Host "No DevToolsActivePort file found under $env:DRUMCAT_WEBDRIVER_USER_DATA_DIR"
+            Get-ChildItem $env:DRUMCAT_WEBDRIVER_USER_DATA_DIR -Recurse -Force -ErrorAction SilentlyContinue |
+              Select-Object -First 80 -ExpandProperty FullName
+          }
+
           $logs = Get-ChildItem $env:LOCALAPPDATA, $env:APPDATA -Filter "DrumCat.log" -Recurse -ErrorAction SilentlyContinue |
             Select-Object -First 4
           foreach ($log in $logs) {
