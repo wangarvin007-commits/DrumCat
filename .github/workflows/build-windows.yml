@@ -115,7 +115,52 @@ jobs:
           "WEBVIEW2_USER_DATA_FOLDER=$profile" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Run Windows native UI tests
-        run: pnpm --dir e2e test
+        shell: pwsh
+        run: |
+          $nestedPortFile = Join-Path $env:DRUMCAT_WEBDRIVER_USER_DATA_DIR "EBWebView\DevToolsActivePort"
+          $driverPortFile = Join-Path $env:DRUMCAT_WEBDRIVER_USER_DATA_DIR "DevToolsActivePort"
+
+          # WebView2 writes this file one level below the location EdgeDriver watches.
+          $portFileSync = Start-Job -ScriptBlock {
+            param($sourcePath, $destinationPath)
+
+            $deadline = (Get-Date).AddMinutes(5)
+            while ((Get-Date) -lt $deadline) {
+              if (Test-Path $sourcePath) {
+                try {
+                  $portDetails = @(Get-Content $sourcePath -ErrorAction Stop)
+                  if ($portDetails.Count -ge 2) {
+                    Copy-Item $sourcePath $destinationPath -Force -ErrorAction Stop
+                    Write-Output "Copied DevToolsActivePort to the EdgeDriver profile root."
+                    return
+                  }
+                }
+                catch {
+                  # The file can be briefly locked while WebView2 finishes writing it.
+                }
+              }
+
+              Start-Sleep -Milliseconds 50
+            }
+
+            Write-Warning "Timed out waiting for the nested DevToolsActivePort file."
+          } -ArgumentList $nestedPortFile, $driverPortFile
+
+          $testExitCode = 1
+          try {
+            pnpm --dir e2e test
+            $testExitCode = $LASTEXITCODE
+          }
+          finally {
+            Wait-Job $portFileSync -Timeout 2 | Out-Null
+            Receive-Job $portFileSync
+            Stop-Job $portFileSync -ErrorAction SilentlyContinue
+            Remove-Job $portFileSync -Force -ErrorAction SilentlyContinue
+          }
+
+          if ($testExitCode -ne 0) {
+            exit $testExitCode
+          }
 
       - name: Collect Windows UI diagnostics
         if: failure()
