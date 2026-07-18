@@ -1,4 +1,4 @@
-/* global describe, it */
+/* global before, describe, it */
 
 import { $, $$, browser } from '@wdio/globals'
 import assert from 'node:assert/strict'
@@ -11,7 +11,7 @@ async function getAttribute(selector, attribute) {
   return elements[0].getAttribute(attribute)
 }
 
-async function switchToWindowByUrl(fragment, timeoutMs = 10_000) {
+async function switchToWindowByHash(hash, timeoutMs = 10_000) {
   let matchingHandle
 
   await browser.waitUntil(async () => {
@@ -20,7 +20,7 @@ async function switchToWindowByUrl(fragment, timeoutMs = 10_000) {
     for (const handle of handles) {
       await browser.switchToWindow(handle)
 
-      if ((await browser.getUrl()).includes(fragment)) {
+      if (new URL(await browser.getUrl()).hash === hash) {
         matchingHandle = handle
         return true
       }
@@ -29,7 +29,7 @@ async function switchToWindowByUrl(fragment, timeoutMs = 10_000) {
     return false
   }, {
     timeout: timeoutMs,
-    timeoutMsg: `Unable to find window URL containing: ${fragment}`,
+    timeoutMsg: `Unable to find window route: ${hash}`,
   })
 
   return matchingHandle
@@ -42,6 +42,10 @@ async function enterTextCommand(input, text) {
 }
 
 describe('DrumCat Windows native MVP', () => {
+  before(async () => {
+    await switchToWindowByHash('#/', 30_000)
+  })
+
   it('opens the text-only local chat and drives a reply animation', async () => {
     const viewport = await $('.pet-viewport')
     await viewport.waitForDisplayed({ timeout: 30_000 })
@@ -161,7 +165,7 @@ describe('DrumCat Windows native MVP', () => {
     await settingsButton.waitForDisplayed({ timeout: 5_000 })
     await settingsButton.click()
 
-    await switchToWindowByUrl('#/preference')
+    await switchToWindowByHash('#/preference')
     const companionNav = await $('[data-testid="settings-nav-companion"]')
     await companionNav.waitForExist({ timeout: 8_000 })
     await companionNav.click()
@@ -185,7 +189,7 @@ describe('DrumCat Windows native MVP', () => {
       return bodyText.includes('OpenAI 已连接')
     }, { timeout: 5_000 })
 
-    await switchToWindowByUrl('#/preference')
+    await switchToWindowByHash('#/preference')
     await $('[data-testid="settings-nav-about"]').click()
     const bodyText = await $('body').getText()
     assert(!bodyText.includes('项目源码'))
