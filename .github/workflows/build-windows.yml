@@ -81,6 +81,39 @@ jobs:
         run: |
           pnpm --dir e2e install --frozen-lockfile
 
+      - name: Verify native executable starts independently
+        shell: pwsh
+        run: |
+          Get-Process -Name "drum-cat" -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $app = $null
+          try {
+            $app = Start-Process -FilePath $env:DRUMCAT_BINARY -PassThru
+            Start-Sleep -Seconds 8
+
+            if ($app.HasExited) {
+              throw "DrumCat native executable exited before WebDriver startup."
+            }
+
+            Write-Host "DrumCat native executable stayed alive for 8 seconds."
+          }
+          finally {
+            if ($app -and -not $app.HasExited) {
+              Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Prepare isolated WebView2 automation profile
+        shell: pwsh
+        run: |
+          $profile = Join-Path $env:RUNNER_TEMP "drumcat-wdio-webview2"
+          Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $profile -Force | Out-Null
+
+          "DRUMCAT_WEBDRIVER_USER_DATA_DIR=$profile" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "WEBVIEW2_USER_DATA_FOLDER=$profile" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Run Windows native UI tests
         run: pnpm --dir e2e test
 
