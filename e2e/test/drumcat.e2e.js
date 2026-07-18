@@ -51,7 +51,7 @@ describe('DrumCat Windows native MVP', () => {
     await switchToWindowByHash('#/', 30_000)
   })
 
-  it('opens the text-only local chat and drives a reply animation', async () => {
+  it('opens the compact text-only companion panel', async () => {
     logStep('opening companion chat')
     const viewport = await $('.pet-viewport')
     await viewport.waitForDisplayed({ timeout: 30_000 })
@@ -74,7 +74,9 @@ describe('DrumCat Windows native MVP', () => {
     assert(panelWindowRect.width >= 350 && panelWindowRect.width <= 500)
     assert(panelWindowRect.height >= 480 && panelWindowRect.height <= 560)
     logStep('compact panel geometry is correct')
+  })
 
+  it('handles a local text reply and drives its animation', async () => {
     const input = await $('[data-testid="chat-input"]')
     await enterTextCommand(input, '敲鼓给我听')
     logStep('local text command was submitted')
