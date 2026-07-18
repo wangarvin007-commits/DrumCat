@@ -247,6 +247,8 @@ async function loadImage(file: File) {
           :key="message.id"
           class="message"
           :class="`is-${message.role}`"
+          :data-action="message.action || undefined"
+          :data-emotion="message.emotion || undefined"
         >
           <span
             v-if="message.attachment"

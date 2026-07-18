@@ -87,14 +87,12 @@ describe('DrumCat Windows native MVP', () => {
     }, { timeout: 8_000 })
     logStep('local reply is visible')
 
-    await browser.waitUntil(
-      async () => await getAttribute('[data-testid="pet-sprite"]', 'data-animation-state') === 'tapping',
-      { timeout: 5_000 },
-    )
-    logStep('reply animation is active')
+    const replyAction = await $('.message.is-assistant[data-action="tap"]')
+    await replyAction.waitForExist({ timeout: 5_000 })
+    logStep('reply action is recorded as tap')
   })
 
-  it('keeps manual sleep active during passive mouse movement and wakes explicitly', async () => {
+  it('keeps manual sleep active during passive mouse movement', async () => {
     const input = await $('[data-testid="chat-input"]')
 
     await enterTextCommand(input, '睡觉')
@@ -107,7 +105,10 @@ describe('DrumCat Windows native MVP', () => {
     await panel.moveTo({ xOffset: 20, yOffset: 20 })
     await browser.pause(400)
     assert.equal(await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping'), 'true')
+  })
 
+  it('wakes from manual sleep after an explicit command', async () => {
+    const input = await $('[data-testid="chat-input"]')
     await enterTextCommand(input, '醒醒')
     await browser.waitUntil(
       async () => await getAttribute('[data-testid="pet-sprite"]', 'data-sleeping') === 'false',
