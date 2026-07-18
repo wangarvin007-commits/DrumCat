@@ -116,7 +116,7 @@ describe('DrumCat Windows native MVP', () => {
     )
   })
 
-  it('switches to the dog skin and opens the custom-skin QR dialog', async () => {
+  it('restores the pet window after closing the companion panel', async () => {
     await $('[aria-label="关闭陪伴面板"]').click()
     await browser.waitUntil(async () => {
       const restoredRect = await browser.getWindowRect()
@@ -126,7 +126,10 @@ describe('DrumCat Windows native MVP', () => {
     const restoredRect = await browser.getWindowRect()
     assert(Math.abs(restoredRect.x - initialPetWindowRect.x) <= 4)
     assert(Math.abs(restoredRect.y - initialPetWindowRect.y) <= 4)
+    logStep('pet window position and size were restored')
+  })
 
+  it('switches to the dog skin', async () => {
     const viewport = await $('.pet-viewport')
     await viewport.moveTo()
 
@@ -142,23 +145,30 @@ describe('DrumCat Windows native MVP', () => {
       async () => await getAttribute('[data-testid="pet-sprite"]', 'data-skin-id') === 'realistic-shiba-inu',
       { timeout: 5_000 },
     )
+    logStep('dog skin is active')
+  })
 
+  it('opens the custom-skin QR dialog', async () => {
     await $('[data-testid="custom-skin"]').click()
     const dialog = await $('[data-testid="custom-skin-dialog"]')
     await dialog.waitForDisplayed({ timeout: 5_000 })
 
     const qr = await dialog.$('img[alt="Arvin 的微信二维码"]')
     assert((await qr.getAttribute('src')).includes('/custom-skin/arvin-wechat.jpg'))
+    logStep('custom-skin QR is visible')
   })
 
-  it('syncs the memory-only AI key across windows and hides source and voice rows', async () => {
+  it('closes the custom-skin overlays cleanly', async () => {
     await $('[aria-label="关闭定制皮肤二维码"]').click()
     await browser.waitUntil(
       async () => (await $$('[data-testid="custom-skin-dialog"]')).length === 0,
       { timeout: 5_000 },
     )
     await $('[aria-label="关闭皮肤选择"]').click()
+    logStep('custom-skin overlays are closed')
+  })
 
+  it('syncs the memory-only AI key across windows and hides source and voice rows', async () => {
     const mainHandle = await browser.getWindowHandle()
     const viewport = await $('.pet-viewport')
     await viewport.moveTo()
