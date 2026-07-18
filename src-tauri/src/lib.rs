@@ -11,6 +11,19 @@ use tauri_plugin_custom_window::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(target_os = "windows")]
+    let mut context = context;
+
+    #[cfg(target_os = "windows")]
+    if std::env::var_os("DRUMCAT_WEBDRIVER_REMOTE_DEBUGGING").is_some() {
+        const WEBDRIVER_BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=0";
+
+        for window in &mut context.config_mut().app.windows {
+            window.additional_browser_args = Some(WEBDRIVER_BROWSER_ARGS.into());
+        }
+    }
+
     let app = tauri::Builder::default()
         .menu(|app| {
             let app_menu = SubmenuBuilder::new(app, "DrumCat")
@@ -93,7 +106,7 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running tauri application");
 
     app.run(|app_handle, event| match event {

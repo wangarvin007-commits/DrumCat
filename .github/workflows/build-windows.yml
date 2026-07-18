@@ -112,8 +112,8 @@ jobs:
           New-Item -ItemType Directory -Path $profile -Force | Out-Null
 
           "DRUMCAT_WEBDRIVER_USER_DATA_DIR=$profile" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DRUMCAT_WEBDRIVER_REMOTE_DEBUGGING=1" | Out-File -FilePath $env:GITHUB_ENV -Append
           "WEBVIEW2_USER_DATA_FOLDER=$profile" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Run Windows native UI tests
         shell: pwsh
@@ -199,6 +199,8 @@ jobs:
       - name: Smoke-test silent installer and installed app
         shell: pwsh
         run: |
+          Remove-Item Env:DRUMCAT_WEBDRIVER_REMOTE_DEBUGGING -ErrorAction SilentlyContinue
+
           $installer = Get-ChildItem target/release/bundle/nsis -Filter "*-setup.exe" |
             Select-Object -First 1
 
