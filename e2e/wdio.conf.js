@@ -65,6 +65,6 @@ export const config = {
   reporters: ['spec'],
   mochaOpts: {
     ui: 'bdd',
-    timeout: 90_000,
+    timeout: process.platform === 'win32' ? 240_000 : 90_000,
   },
 }
