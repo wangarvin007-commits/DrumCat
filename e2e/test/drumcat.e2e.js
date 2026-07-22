@@ -173,8 +173,8 @@ describe('DrumCat Windows native MVP', () => {
     logStep('custom-skin overlays are closed')
   })
 
-  it('syncs the memory-only AI key across windows and hides source and voice rows', async () => {
-    const mainHandle = await browser.getWindowHandle()
+  it('configures and verifies the memory-only AI key in settings', async () => {
+    logStep('开始打开设置窗口')
     const viewport = await $('.pet-viewport')
     await viewport.moveTo()
 
@@ -183,6 +183,7 @@ describe('DrumCat Windows native MVP', () => {
     await settingsButton.click()
 
     await switchToWindowByHash('#/preference')
+    logStep('已切换到设置窗口')
     const companionNav = await $('[data-testid="settings-nav-companion"]')
     await companionNav.waitForExist({ timeout: 8_000 })
     await companionNav.click()
@@ -193,26 +194,45 @@ describe('DrumCat Windows native MVP', () => {
       await browser.waitUntil(() => enabled.isSelected(), { timeout: 5_000 })
     }
 
-    await $('[data-testid="ai-provider"]').selectByAttribute('value', 'openai')
-    await $('[data-testid="companion-name"]').setValue('小鼓')
-    await $('[data-testid="owner-name"]').setValue('Arvin')
-    await $('[data-testid="ai-session-key"]').setValue('memory-only-test-key')
+    const provider = await $('[data-testid="ai-provider"]')
+    const companionName = await $('[data-testid="companion-name"]')
+    const ownerName = await $('[data-testid="owner-name"]')
+    const sessionKey = await $('[data-testid="ai-session-key"]')
+    await provider.selectByAttribute('value', 'openai')
+    await companionName.setValue('小鼓')
+    await ownerName.setValue('Arvin')
+    await sessionKey.setValue('memory-only-test-key')
+    logStep('已填写 AI Key')
 
-    const companionSettingsText = await $('body').getText()
-    assert(!companionSettingsText.includes('语音输入'))
-    assert(!companionSettingsText.includes('语音朗读'))
+    assert.equal(await enabled.isSelected(), true)
+    assert.equal(await provider.getValue(), 'openai')
+    assert.equal(await companionName.getValue(), '小鼓')
+    assert.equal(await ownerName.getValue(), 'Arvin')
+    assert.equal(await sessionKey.getValue(), 'memory-only-test-key')
+    logStep('已验证设置窗口状态')
+  })
 
-    await browser.switchToWindow(mainHandle)
+  it('syncs the memory-only AI key across windows and hides source and voice rows', async () => {
+    await switchToWindowByHash('#/')
+    logStep('已返回主窗口')
     await $('[data-testid="open-chat"]').click()
     await browser.waitUntil(async () => {
       const bodyText = await $('body').getText()
       return bodyText.includes('OpenAI 已连接')
     }, { timeout: 5_000 })
+    logStep('已验证跨窗口同步')
 
     await switchToWindowByHash('#/preference')
     await $('[data-testid="settings-nav-about"]').click()
     const bodyText = await $('body').getText()
     assert(!bodyText.includes('项目源码'))
     assert(!bodyText.includes('技术底座'))
+    logStep('已确认 source 行隐藏')
+
+    await $('[data-testid="settings-nav-companion"]').click()
+    const companionSettingsText = await $('body').getText()
+    assert(!companionSettingsText.includes('语音输入'))
+    assert(!companionSettingsText.includes('语音朗读'))
+    logStep('已确认 voice 行隐藏')
   })
 })
