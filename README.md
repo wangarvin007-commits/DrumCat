@@ -1,14 +1,14 @@
 # DrumCat
 
-DrumCat 是一个本地运行的跨平台桌宠，使用 Tauri、Vue 3 和 Rust 构建。主窗口透明、无边框并可置顶，支持半写实猫狗皮肤、键鼠互动、自动睡眠、对话、专注计时、系统提醒、托盘菜单、快捷键和设置持久化。对话面板采用紧凑窗口，打开时不会生成大面积透明置顶区域，关闭后会恢复桌宠原尺寸和原位置。
+DrumCat 是一个本地运行的跨平台桌宠，使用 Tauri、Vue 3 和 Rust 构建。主窗口透明、无边框并可置顶，支持多风格猫狗皮肤、键鼠互动、自动睡眠、对话、专注计时、系统提醒、托盘菜单、快捷键和设置持久化。对话面板采用紧凑窗口，打开时不会生成大面积透明置顶区域，关闭后会恢复桌宠原尺寸和原位置。
 
 完整的对外产品介绍和逐项功能清单见 [`产品文案.md`](产品文案.md)。
 
 ## 下载
 
-- Windows 10/11 x64 安装程序：[下载 EXE](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.1/DrumCat_0.1.1_Windows_x64_setup.exe)
-- macOS Apple Silicon 安装镜像：[下载 DMG](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.1/DrumCat_0.1.1_aarch64.dmg)
-- macOS Apple Silicon 应用压缩包：[下载 ZIP](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.1/DrumCat_0.1.1_macOS_arm64.zip)
+- Windows 10/11 x64 安装程序：[下载 EXE](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.2/DrumCat_0.1.2_Windows_x64_setup.exe)
+- macOS Apple Silicon 安装镜像：[下载 DMG](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.2/DrumCat_0.1.2_aarch64.dmg)
+- macOS Apple Silicon 应用压缩包：[下载 ZIP](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.2/DrumCat_0.1.2_macOS_arm64.zip)
 - 全部版本与更新说明：[GitHub Releases](https://github.com/wangarvin007-commits/DrumCat/releases)
 
 Windows 安装包当前未购买代码签名证书，首次安装时 Windows Defender SmartScreen 可能显示“未知发布者”，请选择“更多信息 → 仍要运行”。macOS 发布包使用 ad-hoc 签名，尚未进行 Apple 公证；首次启动时如被 macOS 拦截，可右键应用并选择“打开”。
@@ -31,7 +31,7 @@ Windows 安装包当前未购买代码签名证书，首次安装时 Windows Def
 - 陪伴、专注、安静、会议、游戏和直播 / OBS 模式
 - 可配置键鼠动作、主动消息上限和本地记忆
 - 托盘菜单、全局快捷键和设置面板
-- 英短“奶盖”和柴犬“栗子”两套半写实 v2 全动作皮肤
+- 英短“奶盖”、柴犬“栗子”和线条小狗“小金毛”三套 v2 全动作皮肤
 - 衣橱与设置页内置“定制专属皮肤”入口，可扫码联系 Arvin
 - 每套皮肤包含 9 类动作、自动眨眼与 16 方向鼠标注视；旧版临时皮肤已移除
 

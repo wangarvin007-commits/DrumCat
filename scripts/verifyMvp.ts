@@ -52,9 +52,9 @@ function freshCompanionStore() {
   return useCompanionStore()
 }
 
-await check('只注册两套半写实猫狗皮肤，旧皮肤不会回退', () => {
-  assert.equal(PET_SKINS.length, 2)
-  assert.deepEqual(PET_SKINS.map(skin => skin.kind).sort(), ['cat', 'dog'])
+await check('只注册三套完整猫狗皮肤，旧皮肤不会回退', () => {
+  assert.equal(PET_SKINS.length, 3)
+  assert.deepEqual(PET_SKINS.map(skin => skin.kind).sort(), ['cat', 'dog', 'dog'])
   assert.equal(DEFAULT_PET_SKIN_ID, 'realistic-british-shorthair')
   assert.equal(isPetSkinId('ragdoll'), false)
   assert.equal(existsSync(join(root, 'public', 'pets', 'ragdoll')), false)
@@ -62,7 +62,7 @@ await check('只注册两套半写实猫狗皮肤，旧皮肤不会回退', () =
   assert(PET_SKINS.every(skin => skin.spriteRows === 11))
 })
 
-await check('两套 v2 图集和元数据均已打包', () => {
+await check('三套 v2 图集和元数据均已打包', () => {
   for (const skin of PET_SKINS) {
     const directory = join(root, 'public', 'pets', skin.id)
     const spritesheet = join(directory, 'spritesheet.webp')
