@@ -211,9 +211,14 @@ export const usePetStore = defineStore('pet', () => {
     look.x = Math.max(-1, Math.min(1, x))
     look.y = Math.max(-1, Math.min(1, y))
 
-    if (sleeping.value || Date.now() - lastActivityAt.value >= 500) {
+    if (!sleeping.value && Date.now() - lastActivityAt.value >= 500) {
       noteActivity()
     }
+  }
+
+  function resetLook() {
+    look.x = 0
+    look.y = 0
   }
 
   function reactToCompanion(action: CompanionAction, emotion: CompanionEmotion, countsAsActivity = true) {
@@ -290,6 +295,7 @@ export const usePetStore = defineStore('pet', () => {
     reactToCompanion,
     reactToKeyboard,
     reactToMouse,
+    resetLook,
     setLook,
     setSkin,
     skinId,

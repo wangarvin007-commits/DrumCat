@@ -5,12 +5,13 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { availableMonitors } from '@tauri-apps/api/window'
 import { useDebounceFn } from '@vueuse/core'
 import { isNumber } from 'es-toolkit/compat'
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { WINDOW_LABEL } from '@/constants'
 import { useAppStore } from '@/stores/app'
 import { useCatStore } from '@/stores/cat'
 import { getCursorMonitor } from '@/utils/monitor'
+import { clampWindowPosition, getWindowBounds } from '@/utils/window'
 
 export type WindowState = Record<string, Partial<PhysicalPosition & PhysicalSize> | undefined>
 
@@ -21,13 +22,23 @@ export function useWindowState() {
   const appStore = useAppStore()
   const catStore = useCatStore()
   const isRestored = ref(false)
+  const unlisteners: Array<() => void> = []
+  let unmounted = false
 
-  onMounted(() => {
-    appWindow.onMoved(onChange)
+  onMounted(async () => {
+    const listeners = await Promise.all([
+      appWindow.onMoved(onChange),
+      appWindow.onResized(onChange),
+      appWindow.onScaleChanged(clampToMonitor),
+    ])
 
-    appWindow.onResized(onChange)
+    if (unmounted) listeners.forEach(unlisten => unlisten())
+    else unlisteners.push(...listeners)
+  })
 
-    appWindow.onScaleChanged(clampToMonitor)
+  onBeforeUnmount(() => {
+    unmounted = true
+    unlisteners.splice(0).forEach(unlisten => unlisten())
   })
 
   const clampToMonitor = useDebounceFn(async () => {
@@ -51,22 +62,19 @@ export function useWindowState() {
 
     const { position: monitorPos, size: monitorSize } = monitor
 
-    const minX = monitorPos.x
-    const maxX = monitorPos.x + monitorSize.width - windowSize.width
-    const minY = monitorPos.y
-    const maxY = monitorPos.y + monitorSize.height - windowSize.height
-
-    let clampedX = Math.max(minX, Math.min(windowPos.x, maxX))
-    let clampedY = Math.max(minY, Math.min(windowPos.y, maxY))
+    const bounds = getWindowBounds(monitorPos, monitorSize, windowSize)
+    const clamped = clampWindowPosition(windowPos, bounds)
+    let clampedX = clamped.x
+    let clampedY = clamped.y
 
     if (catStore.window.snapToEdges) {
       const scaleFactor = await appWindow.scaleFactor()
       const snapDistance = Math.max(0, catStore.window.snapDistance) * scaleFactor
 
-      if (Math.abs(clampedX - minX) <= snapDistance) clampedX = minX
-      if (Math.abs(clampedX - maxX) <= snapDistance) clampedX = maxX
-      if (Math.abs(clampedY - minY) <= snapDistance) clampedY = minY
-      if (Math.abs(clampedY - maxY) <= snapDistance) clampedY = maxY
+      if (Math.abs(clampedX - bounds.minX) <= snapDistance) clampedX = bounds.minX
+      if (Math.abs(clampedX - bounds.maxX) <= snapDistance) clampedX = bounds.maxX
+      if (Math.abs(clampedY - bounds.minY) <= snapDistance) clampedY = bounds.minY
+      if (Math.abs(clampedY - bounds.maxY) <= snapDistance) clampedY = bounds.maxY
     }
 
     if (clampedX === windowPos.x && clampedY === windowPos.y) return

@@ -14,7 +14,7 @@ import { useCompanionStore } from '@/stores/companion'
 import { useGeneralStore } from '@/stores/general'
 import { usePetStore } from '@/stores/pet'
 
-import { GITHUB_LINK } from '../constants'
+import { PROJECT_GITHUB_LINK } from '../constants'
 import { isMac } from '../utils/platform'
 import { useAppMenu } from './useAppMenu'
 
@@ -27,6 +27,7 @@ export function useTray() {
   const petStore = usePetStore()
   const { getBaseMenu, getExitMenu } = useAppMenu()
   const { t } = useI18n()
+  let menuRevision = 0
 
   watch([
     () => catStore.window.visible,
@@ -38,11 +39,11 @@ export function useTray() {
     () => companionStore.mode,
     () => companionStore.focus.status,
   ], () => {
-    updateTrayMenu()
+    void updateTrayMenu()
   })
 
   watchDebounced([() => catStore.window.scale, () => catStore.window.opacity], () => {
-    updateTrayMenu()
+    void updateTrayMenu()
   }, { debounce: 200 })
 
   const getTrayById = () => {
@@ -82,7 +83,9 @@ export function useTray() {
       PredefinedMenuItem.new({ item: 'Separator' }),
       MenuItem.new({
         text: t('composables.useTray.openSource'),
-        action: () => openUrl(GITHUB_LINK),
+        action: () => {
+          void openUrl(PROJECT_GITHUB_LINK)
+        },
       }),
       PredefinedMenuItem.new({ item: 'Separator' }),
       MenuItem.new({
@@ -96,13 +99,14 @@ export function useTray() {
   }
 
   const updateTrayMenu = async () => {
+    const revision = ++menuRevision
     const tray = await getTrayById()
 
     if (!tray) return
 
     const menu = await getTrayMenu()
 
-    tray.setMenu(menu)
+    if (revision === menuRevision) await tray.setMenu(menu)
   }
 
   watch(() => generalStore.app.trayVisible, async (visible) => {
@@ -110,6 +114,6 @@ export function useTray() {
 
     if (!tray) return
 
-    tray.setVisible(visible)
+    await tray.setVisible(visible)
   }, { immediate: true })
 }

@@ -1,6 +1,6 @@
 [package]
 name = "drum-cat"
-version = "0.1.0"
+version = "0.1.2"
 description = "A local interactive desktop pet"
 authors = [ "Arvin Wang" ]
 edition = "2024"
@@ -23,6 +23,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { workspace = true, features = ["tray-icon", "macos-private-api", "image-png"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+futures-util.workspace = true
+reqwest.workspace = true
 tauri-plugin-custom-window.workspace = true
 tauri-plugin-admin-status.workspace = true
 tauri-plugin-os = "2"

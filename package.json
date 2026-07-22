@@ -1,16 +1,16 @@
 {
   "name": "drum-cat",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "author": {
     "name": "Arvin Wang"
   },
+  "homepage": "https://github.com/wangarvin007-commits/DrumCat#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wangarvin007-commits/DrumCat.git"
   },
-  "homepage": "https://github.com/wangarvin007-commits/DrumCat#readme",
   "bugs": {
     "url": "https://github.com/wangarvin007-commits/DrumCat/issues"
   },
@@ -23,6 +23,7 @@
     "test:mvp": "node --import tsx scripts/verifyMvp.ts",
     "typecheck": "tsc --noEmit",
     "lint:check": "eslint src --no-fix",
+    "package:mac": "LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 tauri build --bundles app,dmg",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint --fix src",
@@ -75,7 +76,7 @@
     "release-it": "^18.1.2",
     "sass": "^1.99.0",
     "simple-git-hooks": "^2.13.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "unocss": "^66.6.8",
     "vite": "^6.4.2"

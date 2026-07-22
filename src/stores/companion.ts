@@ -3,13 +3,16 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
 
 import type {
+  AiAuthMode,
+  AiProtocol,
+  AiProviderId,
   CompanionAction,
   CompanionMessage,
   CompanionMode,
   CompanionPersonality,
 } from '@/utils/companion'
 
-import { createMessage } from '@/utils/companion'
+import { createMessage, getAiProviderPreset } from '@/utils/companion'
 
 export type InteractionTrigger
   = | 'keyboard'
@@ -69,6 +72,15 @@ export const ACTION_OPTIONS: ReadonlyArray<{ value: CompanionAction, label: stri
 ]
 
 const MAX_MESSAGES = 20
+const MAX_REMINDER_MINUTES = 7 * 24 * 60
+
+function normalizeMinutes(value: number, fallback: number, maximum: number) {
+  const number = Number(value)
+
+  return Number.isFinite(number)
+    ? Math.max(1, Math.min(maximum, Math.round(number)))
+    : fallback
+}
 
 export function getLocalDateKey(date = new Date()) {
   const year = date.getFullYear()
@@ -81,17 +93,22 @@ export function getLocalDateKey(date = new Date()) {
 export const useCompanionStore = defineStore('companion', () => {
   const personality = ref<CompanionPersonality>('warm')
   const mode = ref<CompanionMode>('companion')
+  const companionName = ref('DrumCat')
   const userName = ref('')
+  const assistantMission = ref('陪伴我工作，帮助我拆解任务、保持专注，并适时提醒休息。')
   const currentGoal = ref('')
   const memoryNotes = ref('')
   const messages = ref<CompanionMessage[]>([])
   const rememberedMessages = ref<CompanionMessage[]>([])
-  const sessionApiKey = ref('')
 
   const ai = reactive({
     enabled: false,
-    endpoint: 'https://api.openai.com',
-    model: 'gpt-4.1-mini',
+    provider: 'openai' as AiProviderId,
+    protocol: 'openai' as AiProtocol,
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-5.2',
+    authMode: 'bearer' as AiAuthMode,
+    authHeader: 'Authorization',
     streaming: true,
   })
 
@@ -100,8 +117,6 @@ export const useCompanionStore = defineStore('companion', () => {
     keyboardInteraction: true,
     mouseInteraction: true,
     systemNotifications: true,
-    voiceInput: false,
-    voiceOutput: false,
     imageUnderstanding: false,
   })
 
@@ -152,7 +167,7 @@ export const useCompanionStore = defineStore('companion', () => {
     }
 
     if (!messages.value.length) {
-      messages.value = [createMessage('assistant', '你好，我是 DrumCat。可以聊天、开番茄钟，或者直接说“20 分钟后提醒我喝水”。', {
+      messages.value = [createMessage('assistant', `你好，我是 ${companionName.value.trim() || 'DrumCat'}。可以聊天、开番茄钟，或者直接说“20 分钟后提醒我喝水”。`, {
         emotion: 'happy',
         action: 'wave',
       })]
@@ -191,6 +206,18 @@ export const useCompanionStore = defineStore('companion', () => {
       : []
   }
 
+  function selectAiProvider(provider: AiProviderId) {
+    ai.provider = provider
+    if (provider === 'custom') return
+
+    const preset = getAiProviderPreset(provider)
+    ai.protocol = preset.protocol
+    ai.endpoint = preset.endpoint
+    ai.model = preset.model
+    ai.authMode = preset.authMode
+    ai.authHeader = preset.authHeader || ''
+  }
+
   function addTask(text: string) {
     const value = text.trim()
     if (!value) return
@@ -205,11 +232,12 @@ export const useCompanionStore = defineStore('companion', () => {
   function addReminder(text: string, minutes: number) {
     const value = text.trim()
     if (!value) return
+    const safeMinutes = normalizeMinutes(minutes, 1, MAX_REMINDER_MINUTES)
 
     const reminder: ReminderItem = {
       id: nanoid(),
       text: value,
-      dueAt: Date.now() + Math.max(1, minutes) * 60_000,
+      dueAt: Date.now() + safeMinutes * 60_000,
       done: false,
     }
     reminders.value.push(reminder)
@@ -233,7 +261,7 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 
   function startFocus(minutes = focus.focusMinutes) {
-    focus.focusMinutes = Math.max(1, Math.min(180, Math.round(minutes)))
+    focus.focusMinutes = normalizeMinutes(minutes, 25, 180)
     focus.status = 'focus'
     focus.resumeStatus = 'focus'
     focus.remainingSeconds = focus.focusMinutes * 60
@@ -242,7 +270,7 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 
   function startBreak(minutes = focus.breakMinutes) {
-    focus.breakMinutes = Math.max(1, Math.min(60, Math.round(minutes)))
+    focus.breakMinutes = normalizeMinutes(minutes, 5, 60)
     focus.status = 'break'
     focus.resumeStatus = 'break'
     focus.remainingSeconds = focus.breakMinutes * 60
@@ -312,12 +340,14 @@ export const useCompanionStore = defineStore('companion', () => {
   return {
     actionBindings,
     activeTask,
+    ai,
+    assistantMission,
     addMessage,
     addReminder,
     addTask,
-    ai,
     canSendProactive,
     clearMessages,
+    companionName,
     currentGoal,
     dueReminders,
     focus,
@@ -338,7 +368,7 @@ export const useCompanionStore = defineStore('companion', () => {
     removeReminder,
     removeTask,
     resumeFocus,
-    sessionApiKey,
+    selectAiProvider,
     startBreak,
     startFocus,
     stopFocus,
@@ -349,6 +379,6 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 }, {
   tauri: {
-    filterKeys: ['sessionApiKey', 'messages'],
+    filterKeys: ['messages'],
   },
 })

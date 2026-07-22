@@ -1,4 +1,9 @@
+packages:
+  - e2e
+
 allowBuilds:
   '@parcel/watcher': true
+  edgedriver: true
   esbuild: true
+  geckodriver: false
   simple-git-hooks: true

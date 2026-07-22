@@ -15,24 +15,24 @@ const COMMAND = {
   SET_TASKBAR_VISIBILITY: 'plugin:custom-window|set_taskbar_visibility',
 }
 
-export function showWindow(label?: WindowLabel) {
+export function showWindow(label?: WindowLabel): Promise<void> {
   if (label) {
-    emit(LISTEN_KEY.SHOW_WINDOW, label)
-  } else {
-    invoke(COMMAND.SHOW_WINDOW)
+    return emit(LISTEN_KEY.SHOW_WINDOW, label)
   }
+
+  return invoke(COMMAND.SHOW_WINDOW)
 }
 
-export function hideWindow(label?: WindowLabel) {
+export function hideWindow(label?: WindowLabel): Promise<void> {
   if (label) {
-    emit(LISTEN_KEY.HIDE_WINDOW, label)
-  } else {
-    invoke(COMMAND.HIDE_WINDOW)
+    return emit(LISTEN_KEY.HIDE_WINDOW, label)
   }
+
+  return invoke(COMMAND.HIDE_WINDOW)
 }
 
-export function setAlwaysOnTop(alwaysOnTop: boolean) {
-  invoke(COMMAND.SET_ALWAYS_ON_TOP, { alwaysOnTop })
+export function setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
+  return invoke(COMMAND.SET_ALWAYS_ON_TOP, { alwaysOnTop })
 }
 
 export async function toggleWindowVisible(label?: WindowLabel) {
@@ -53,6 +53,6 @@ export async function toggleWindowVisible(label?: WindowLabel) {
   return showWindow(targetLabel)
 }
 
-export async function setTaskbarVisibility(visible: boolean) {
-  invoke(COMMAND.SET_TASKBAR_VISIBILITY, { visible })
+export function setTaskbarVisibility(visible: boolean): Promise<void> {
+  return invoke(COMMAND.SET_TASKBAR_VISIBILITY, { visible })
 }

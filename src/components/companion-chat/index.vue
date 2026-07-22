@@ -1,32 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import type { ChatSendPayload, CompanionAction, CompanionMessage } from '@/utils/companion'
 
 import { MODE_OPTIONS, useCompanionStore } from '@/stores/companion'
 import { usePetStore } from '@/stores/pet'
-
-interface SpeechResultEvent {
-  results: ArrayLike<{ 0: { transcript: string } }>
-}
-
-interface SpeechRecognitionLike {
-  continuous: boolean
-  interimResults: boolean
-  lang: string
-  onend: (() => void) | null
-  onerror: (() => void) | null
-  onresult: ((event: SpeechResultEvent) => void) | null
-  start: () => void
-  stop: () => void
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
+import { getAiProviderPreset } from '@/utils/companion'
 
 const props = withDefaults(defineProps<{
+  aiReady?: boolean
   messages: CompanionMessage[]
   busy?: boolean
 }>(), {
+  aiReady: false,
   busy: false,
 })
 
@@ -46,8 +32,6 @@ const selectedImage = ref<ChatSendPayload['image']>()
 const attachmentError = ref('')
 const messagesRef = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement>()
-const listening = ref(false)
-let recognition: SpeechRecognitionLike | undefined
 
 const quickPrompts = ['给我加油', '敲鼓给我听', '帮我拆下一步']
 const focusTime = computed(() => {
@@ -65,13 +49,10 @@ const focusRingStyle = computed(() => ({
   background: `conic-gradient(#6f88dc ${companionStore.focusProgress * 360}deg, #e9edf5 0deg)`,
 }))
 const activeTask = computed(() => companionStore.activeTask?.text || '这一轮只做一件事')
-
-const speechConstructor = computed<SpeechRecognitionConstructor | undefined>(() => {
-  const speechWindow = window as typeof window & {
-    SpeechRecognition?: SpeechRecognitionConstructor
-    webkitSpeechRecognition?: SpeechRecognitionConstructor
-  }
-  return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
+const aiStatusLabel = computed(() => {
+  if (!companionStore.ai.enabled) return '本地陪伴模式'
+  if (!props.aiReady) return 'AI 已开启，等待完整配置'
+  return `${getAiProviderPreset(companionStore.ai.provider).name} 已连接`
 })
 
 watch(() => props.messages.length, async () => {
@@ -84,8 +65,6 @@ watch(activeTab, async (tab) => {
   await nextTick()
   messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight })
 })
-
-onBeforeUnmount(() => recognition?.stop())
 
 function submit() {
   const value = draft.value.trim()
@@ -174,56 +153,26 @@ async function loadImage(file: File) {
     return
   }
 
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(file)
+    })
 
-  selectedImage.value = { name: file.name, type: file.type, dataUrl }
-}
-
-function toggleVoiceInput() {
-  if (listening.value) {
-    recognition?.stop()
-    return
+    selectedImage.value = { name: file.name, type: file.type, dataUrl }
+  } catch {
+    selectedImage.value = undefined
+    attachmentError.value = '图片读取失败，请重新选择文件。'
   }
-  if (!companionStore.privacy.voiceInput) {
-    attachmentError.value = '请先在设置中开启语音输入权限。'
-    return
-  }
-  if (!speechConstructor.value) {
-    attachmentError.value = '当前系统 WebView 不支持语音识别。'
-    return
-  }
-
-  const SpeechRecognition = speechConstructor.value
-  recognition = new SpeechRecognition()
-  recognition.lang = 'zh-CN'
-  recognition.continuous = false
-  recognition.interimResults = false
-  recognition.onresult = (event) => {
-    const transcript = Array.from(event.results)
-      .map(result => result[0]?.transcript || '')
-      .join('')
-    draft.value = `${draft.value}${transcript}`
-  }
-  recognition.onerror = () => {
-    listening.value = false
-    attachmentError.value = '没有听清楚，请再试一次。'
-  }
-  recognition.onend = () => {
-    listening.value = false
-  }
-  listening.value = true
-  recognition.start()
 }
 </script>
 
 <template>
   <section
     class="companion-panel"
+    data-testid="companion-panel"
     @contextmenu.stop
     @dragover.prevent
     @drop="handleDrop"
@@ -231,12 +180,18 @@ function toggleVoiceInput() {
     @mousedown.stop
     @mousemove.stop
   >
-    <header class="panel-header">
-      <div class="pet-identity">
+    <header
+      class="panel-header"
+      data-tauri-drag-region
+    >
+      <div
+        class="pet-identity"
+        data-tauri-drag-region
+      >
         <span class="identity-dot" />
-        <div>
+        <div data-tauri-drag-region>
           <strong>{{ petStore.currentSkin.name }}</strong>
-          <small>{{ companionStore.ai.enabled ? 'AI 对话已开启' : '本地陪伴模式' }}</small>
+          <small>{{ aiStatusLabel }}</small>
         </div>
       </div>
 
@@ -292,6 +247,8 @@ function toggleVoiceInput() {
           :key="message.id"
           class="message"
           :class="`is-${message.role}`"
+          :data-action="message.action || undefined"
+          :data-emotion="message.emotion || undefined"
         >
           <span
             v-if="message.attachment"
@@ -354,6 +311,7 @@ function toggleVoiceInput() {
         <textarea
           v-model="draft"
           aria-label="输入消息"
+          data-testid="chat-input"
           :disabled="busy"
           placeholder="说点什么，或输入“专注 25 分钟”…"
           rows="1"
@@ -376,15 +334,6 @@ function toggleVoiceInput() {
               @click="chooseImage"
             >
               <span class="i-solar:gallery-add-bold" />
-            </button>
-            <button
-              :aria-pressed="listening"
-              :class="{ active: listening, disabled: !companionStore.privacy.voiceInput || !speechConstructor }"
-              :title="speechConstructor ? '语音输入' : '当前系统不支持语音输入'"
-              type="button"
-              @click="toggleVoiceInput"
-            >
-              <span class="i-solar:microphone-3-bold" />
             </button>
           </div>
 

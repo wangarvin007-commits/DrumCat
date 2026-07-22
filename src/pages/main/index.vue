@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { PhysicalPosition } from '@tauri-apps/api/dpi'
+
 import { LogicalSize } from '@tauri-apps/api/dpi'
 import { Menu, PredefinedMenuItem } from '@tauri-apps/api/menu'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -22,19 +24,21 @@ import { useTauriListen } from '@/composables/useTauriListen'
 import { LISTEN_KEY, WINDOW_LABEL } from '@/constants'
 import { PET_SKINS } from '@/constants/pets'
 import { hideWindow, setAlwaysOnTop, setTaskbarVisibility, showWindow } from '@/plugins/window'
+import { useAiSessionStore } from '@/stores/aiSession'
 import { useCatStore } from '@/stores/cat'
 import { useCompanionStore } from '@/stores/companion'
 import { useGeneralStore } from '@/stores/general'
 import { usePetStore } from '@/stores/pet'
 import {
+  aiAuthRequiresKey,
   createCompanionReply,
   createMessage,
   getCompanionSystemPrompt,
   parseDirectCommand,
-  speakText,
   streamCompanionReply,
 } from '@/utils/companion'
 import { sendSystemNotification } from '@/utils/notification'
+import { getEffectiveAlwaysOnTop, getMainWindowSize } from '@/utils/panel'
 import { isWindows } from '@/utils/platform'
 
 const BASE_WINDOW_SIZE = { width: 320, height: 347 }
@@ -46,6 +50,7 @@ type OpenPanel = 'chat' | 'skins' | null
 
 const { startListening } = useDevice()
 const appWindow = getCurrentWebviewWindow()
+const aiSessionStore = useAiSessionStore()
 const catStore = useCatStore()
 const companionStore = useCompanionStore()
 const petStore = usePetStore()
@@ -62,8 +67,15 @@ let bubbleTimer: number | undefined
 let clockTimer: number | undefined
 let proactiveTimer: number | undefined
 let chatAbortController: AbortController | undefined
+let positionBeforePanel: PhysicalPosition | undefined
+let previousPanelOpen = false
+let windowTransition = 0
 
 const panelOpen = computed(() => openPanel.value !== null)
+const effectiveAlwaysOnTop = computed(() => getEffectiveAlwaysOnTop(
+  catStore.window.alwaysOnTop,
+  panelOpen.value,
+))
 const displayScale = computed(() => panelOpen.value
   ? Math.max(catStore.window.scale, MIN_PANEL_PET_SCALE)
   : catStore.window.scale)
@@ -84,6 +96,17 @@ const modeLabel = computed(() => ({
   game: '游戏模式',
   stream: '直播模式',
 })[companionStore.mode])
+const remoteAiReady = computed(() => {
+  const keyReady = !aiAuthRequiresKey(companionStore.ai.authMode) || aiSessionStore.hasApiKey
+  const customHeaderReady = companionStore.ai.authMode !== 'custom'
+    || Boolean(companionStore.ai.authHeader.trim())
+
+  return companionStore.ai.enabled
+    && Boolean(companionStore.ai.endpoint.trim())
+    && Boolean(companionStore.ai.model.trim())
+    && keyReady
+    && customHeaderReady
+})
 
 onMounted(() => {
   startListening()
@@ -120,12 +143,35 @@ useEventListener('keydown', (event) => {
 })
 
 watch([() => catStore.window.scale, panelOpen], async () => {
+  const transition = ++windowTransition
+  const openingPanel = panelOpen.value && !previousPanelOpen
+  const closingPanel = !panelOpen.value && previousPanelOpen
+  previousPanelOpen = panelOpen.value
+
+  if (openingPanel) {
+    const currentPosition = await appWindow.outerPosition()
+    if (transition !== windowTransition) return
+    positionBeforePanel = currentPosition
+  }
+
   applyingScale = true
+  const windowSize = getMainWindowSize(
+    petViewportSize.value,
+    panelOpen.value,
+    { width: PANEL_WIDTH, height: PANEL_HEIGHT },
+  )
 
   await appWindow.setSize(new LogicalSize(
-    petViewportSize.value.width + (panelOpen.value ? PANEL_WIDTH : 0),
-    Math.max(petViewportSize.value.height, panelOpen.value ? PANEL_HEIGHT : 0),
+    windowSize.width,
+    windowSize.height,
   ))
+
+  if (transition !== windowTransition) return
+
+  if (closingPanel && positionBeforePanel) {
+    await appWindow.setPosition(positionBeforePanel)
+    positionBeforePanel = undefined
+  }
 
   window.setTimeout(() => {
     applyingScale = false
@@ -150,17 +196,15 @@ watch(() => catStore.window.visible, async (value) => {
   value ? await showWindow() : await hideWindow()
 })
 
-watch(() => catStore.window.passThrough, (value) => {
-  appWindow.setIgnoreCursorEvents(value)
-}, { immediate: true })
-
-watch(() => catStore.window.alwaysOnTop, setAlwaysOnTop, { immediate: true })
+watch(effectiveAlwaysOnTop, setAlwaysOnTop, { immediate: true })
 watch(() => generalStore.app.taskbarVisible, setTaskbarVisibility, { immediate: true })
 
 function getCompanionContext() {
   const hidePrivateProfile = companionStore.mode === 'stream'
 
   return {
+    assistantMission: hidePrivateProfile ? '' : companionStore.assistantMission,
+    companionName: companionStore.companionName,
     personality: companionStore.personality,
     userName: hidePrivateProfile ? '' : companionStore.userName,
     currentGoal: hidePrivateProfile ? '' : companionStore.currentGoal,
@@ -191,10 +235,6 @@ function presentAssistantMessage(
 
   petStore.reactToCompanion(action, emotion)
   showBubble(content)
-
-  if (companionStore.privacy.voiceOutput && companionStore.mode !== 'meeting') {
-    speakText(content)
-  }
 }
 
 function inferPresentation(content: string): { action: CompanionAction, emotion: CompanionEmotion } {
@@ -280,12 +320,7 @@ async function handleSendMessage(payload: ChatSendPayload) {
   }
 
   const canUseImage = Boolean(payload.image && companionStore.privacy.imageUnderstanding)
-  const canUseRemoteAi = companionStore.ai.enabled
-    && Boolean(companionStore.ai.endpoint.trim())
-    && Boolean(companionStore.ai.model.trim())
-    && Boolean(companionStore.sessionApiKey.trim())
-
-  if (canUseRemoteAi) {
+  if (remoteAiReady.value) {
     const placeholder = createMessage('assistant', '')
     companionStore.addMessage(placeholder)
     chatAbortController = new AbortController()
@@ -293,11 +328,14 @@ async function handleSendMessage(payload: ChatSendPayload) {
 
     try {
       const reply = await streamCompanionReply({
-        apiKey: companionStore.sessionApiKey,
+        apiKey: aiSessionStore.apiKey,
+        authHeader: companionStore.ai.authHeader,
+        authMode: companionStore.ai.authMode,
         endpoint: companionStore.ai.endpoint,
         imageDataUrl: canUseImage ? payload.image?.dataUrl : undefined,
         messages: companionStore.messages.filter(message => message.id !== placeholder.id),
         model: companionStore.ai.model,
+        protocol: companionStore.ai.protocol,
         stream: companionStore.ai.streaming,
         systemPrompt: getCompanionSystemPrompt(getCompanionContext()),
         signal: chatAbortController.signal,
@@ -312,7 +350,6 @@ async function handleSendMessage(payload: ChatSendPayload) {
       companionStore.updateMessage(placeholder.id, reply, presentation)
       petStore.reactToCompanion(presentation.action, presentation.emotion)
       showBubble(reply)
-      if (companionStore.privacy.voiceOutput && companionStore.mode !== 'meeting') speakText(reply)
     } catch (error) {
       const fallback = createCompanionReply(content, getCompanionContext())
       const detail = error instanceof Error ? error.message : String(error)
@@ -321,7 +358,6 @@ async function handleSendMessage(payload: ChatSendPayload) {
       companionStore.updateMessage(placeholder.id, reply, fallback)
       petStore.reactToCompanion(fallback.action, fallback.emotion)
       showBubble(reply)
-      if (companionStore.privacy.voiceOutput && companionStore.mode !== 'meeting') speakText(reply)
     } finally {
       chatAbortController = undefined
       chatBusy.value = false
@@ -416,9 +452,15 @@ async function handleContextmenu(event: MouseEvent) {
     ],
   })
 
-  if (isWindows && catStore.window.alwaysOnTop) setAlwaysOnTop(false)
-  await menu.popup()
-  if (isWindows && catStore.window.alwaysOnTop) setAlwaysOnTop(true)
+  const restoreTopmost = isWindows && catStore.window.alwaysOnTop
+
+  if (restoreTopmost) await setAlwaysOnTop(false)
+
+  try {
+    await menu.popup()
+  } finally {
+    if (restoreTopmost) await setAlwaysOnTop(true)
+  }
 }
 
 function handleMouseMove(event: MouseEvent) {
@@ -494,6 +536,7 @@ function handlePanelAction(action: CompanionAction) {
       >
         <button
           :class="{ active: openPanel === 'skins' }"
+          data-testid="open-skins"
           title="切换皮肤"
           type="button"
           @click.stop="togglePanel('skins')"
@@ -502,6 +545,7 @@ function handlePanelAction(action: CompanionAction) {
         </button>
         <button
           :class="{ active: openPanel === 'chat' }"
+          data-testid="open-chat"
           title="打开陪伴面板（⌘/Ctrl + K）"
           type="button"
           @click.stop="togglePanel('chat')"
@@ -509,6 +553,7 @@ function handlePanelAction(action: CompanionAction) {
           <span class="i-solar:chat-round-dots-bold" />
         </button>
         <button
+          data-testid="open-settings"
           title="设置"
           type="button"
           @click.stop="openSettings"
@@ -530,6 +575,7 @@ function handlePanelAction(action: CompanionAction) {
 
     <CompanionChat
       v-if="openPanel === 'chat'"
+      :ai-ready="remoteAiReady"
       :busy="chatBusy"
       :messages="companionStore.messages"
       @action="handlePanelAction"
@@ -564,6 +610,12 @@ function handlePanelAction(action: CompanionAction) {
   height: var(--pet-height);
   overflow: hidden;
   opacity: var(--pet-opacity);
+  transition: opacity 150ms ease;
+}
+
+.has-panel .pet-viewport {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pet-toolbar {

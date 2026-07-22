@@ -144,6 +144,10 @@ onBeforeUnmount(clearFrameTimer)
   <div
     class="pet-sprite-stage"
     :class="{ 'is-sleeping': sleeping }"
+    :data-animation-state="state"
+    :data-skin-id="skin.id"
+    :data-sleeping="sleeping ? 'true' : 'false'"
+    data-testid="pet-sprite"
   >
     <div
       aria-hidden="true"

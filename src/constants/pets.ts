@@ -1,4 +1,4 @@
-export type PetSkinId = 'realistic-british-shorthair' | 'realistic-shiba-inu'
+export type PetSkinId = 'realistic-british-shorthair' | 'realistic-shiba-inu' | 'line-golden-puppy'
 
 export interface PetSkin {
   id: PetSkinId
@@ -37,6 +37,18 @@ export const PET_SKINS: readonly PetSkin[] = [
     spriteRows: 11,
     accent: '#c98148',
     tagline: '立耳卷尾，精神又温暖的工作搭子',
+  },
+  {
+    id: 'line-golden-puppy',
+    name: '小金毛',
+    breed: '线条小金毛',
+    kind: 'dog',
+    spritesheet: '/pets/line-golden-puppy/spritesheet.webp',
+    sleepFrame: 2,
+    source: 'User-provided character reference adapted for DrumCat',
+    spriteRows: 11,
+    accent: '#ef6b64',
+    tagline: '大耳朵、红项圈，憨憨又治愈的线条搭子',
   },
 ] as const
 

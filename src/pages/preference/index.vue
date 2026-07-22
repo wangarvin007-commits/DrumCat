@@ -15,8 +15,8 @@ import type { InteractionTrigger } from '@/stores/companion'
 
 import PetSkinPicker from '@/components/pet-skin-picker/index.vue'
 import Shortcut from '@/components/shortcut/index.vue'
-import { GITHUB_LINK } from '@/constants'
 import { isRunningAsAdministrator } from '@/plugins/adminStatus'
+import { useAiSessionStore } from '@/stores/aiSession'
 import { useAppStore } from '@/stores/app'
 import { useCatStore } from '@/stores/cat'
 import {
@@ -28,11 +28,20 @@ import {
 import { useGeneralStore } from '@/stores/general'
 import { usePetStore } from '@/stores/pet'
 import { useShortcutStore } from '@/stores/shortcut'
+import {
+  AI_PROVIDER_PRESETS,
+  aiAuthRequiresKey,
+  createMessage,
+  getAiProviderPreset,
+  getCompanionSystemPrompt,
+  streamCompanionReply,
+} from '@/utils/companion'
 import { isMac, isWindows } from '@/utils/platform'
 
 type SettingsSection = 'appearance' | 'companion' | 'actions' | 'focus' | 'system' | 'about'
 
 const appStore = useAppStore()
+const aiSessionStore = useAiSessionStore()
 const catStore = useCatStore()
 const companionStore = useCompanionStore()
 const generalStore = useGeneralStore()
@@ -44,6 +53,8 @@ const inputMonitoringAuthorized = ref(false)
 const administratorAuthorized = ref(true)
 const logDir = ref('')
 const copied = ref(false)
+const aiConnectionState = ref<'error' | 'idle' | 'loading' | 'success'>('idle')
+const aiConnectionMessage = ref('')
 
 const navigation: ReadonlyArray<{ id: SettingsSection, label: string, hint: string, icon: string }> = [
   { id: 'appearance', label: '外观', hint: '皮肤与窗口', icon: 'i-solar:paw-bold' },
@@ -70,14 +81,47 @@ const permissionLabel = computed(() => {
   if (isWindows) return administratorAuthorized.value ? '权限正常' : '建议以管理员运行'
   return '无需额外权限'
 })
+const selectedAiPreset = computed(() => getAiProviderPreset(companionStore.ai.provider))
+const aiKeyRequired = computed(() => aiAuthRequiresKey(companionStore.ai.authMode))
+const aiConfigComplete = computed(() => {
+  const customHeaderReady = companionStore.ai.authMode !== 'custom'
+    || Boolean(companionStore.ai.authHeader.trim())
+
+  return Boolean(companionStore.ai.endpoint.trim())
+    && Boolean(companionStore.ai.model.trim())
+    && (!aiKeyRequired.value || aiSessionStore.hasApiKey)
+    && customHeaderReady
+})
 
 watch(() => generalStore.appearance.isDark, (value) => {
   document.documentElement.classList.toggle('dark', value)
 }, { immediate: true })
 
+watch(
+  () => [
+    companionStore.ai.provider,
+    companionStore.ai.protocol,
+    companionStore.ai.endpoint,
+    companionStore.ai.model,
+    companionStore.ai.authMode,
+    companionStore.ai.authHeader,
+    aiSessionStore.apiKey,
+  ],
+  () => {
+    aiConnectionState.value = 'idle'
+    aiConnectionMessage.value = ''
+  },
+)
+
 onMounted(async () => {
   await appWindow.setTitle('DrumCat 设置')
-  logDir.value = await appLogDir()
+
+  try {
+    logDir.value = await appLogDir()
+  } catch {
+    logDir.value = ''
+  }
+
   await refreshPermission()
 })
 
@@ -131,6 +175,52 @@ function testAction(trigger: InteractionTrigger) {
   petStore.executeAction(companionStore.actionBindings[trigger])
 }
 
+function selectAiProvider() {
+  companionStore.selectAiProvider(companionStore.ai.provider)
+}
+
+async function testAiConnection() {
+  if (!aiConfigComplete.value || aiConnectionState.value === 'loading') {
+    aiConnectionState.value = 'error'
+    aiConnectionMessage.value = '请先补全接口地址、模型、鉴权方式和密钥。'
+    return
+  }
+
+  aiConnectionState.value = 'loading'
+  aiConnectionMessage.value = '正在通过原生网络层验证接口…'
+
+  try {
+    const reply = await streamCompanionReply({
+      apiKey: aiSessionStore.apiKey,
+      authHeader: companionStore.ai.authHeader,
+      authMode: companionStore.ai.authMode,
+      endpoint: companionStore.ai.endpoint,
+      messages: [createMessage('user', '请用一句简短中文回复，确认连接正常。')],
+      model: companionStore.ai.model,
+      protocol: companionStore.ai.protocol,
+      stream: false,
+      systemPrompt: getCompanionSystemPrompt({
+        assistantMission: companionStore.assistantMission,
+        companionName: companionStore.companionName,
+        currentGoal: companionStore.currentGoal,
+        memoryNotes: companionStore.memoryNotes,
+        personality: companionStore.personality,
+        userName: companionStore.userName,
+      }),
+      timeoutMs: 20_000,
+      onDelta() {},
+    })
+
+    if (!reply) throw new Error('接口没有返回文本内容')
+    aiConnectionState.value = 'success'
+    aiConnectionMessage.value = `连接成功：${reply.slice(0, 64)}`
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    aiConnectionState.value = 'error'
+    aiConnectionMessage.value = message.length > 120 ? `${message.slice(0, 120)}…` : message
+  }
+}
+
 function formatReminderTime(timestamp: number) {
   return new Intl.DateTimeFormat('zh-CN', {
     month: 'numeric',
@@ -138,6 +228,12 @@ function formatReminderTime(timestamp: number) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(timestamp)
+}
+
+async function openLogDirectory() {
+  if (!logDir.value) return
+
+  await openPath(logDir.value)
 }
 </script>
 
@@ -166,6 +262,7 @@ function formatReminderTime(timestamp: number) {
           v-for="item in navigation"
           :key="item.id"
           :class="{ active: activeSection === item.id }"
+          :data-testid="`settings-nav-${item.id}`"
           type="button"
           @click="activeSection = item.id"
         >
@@ -351,13 +448,25 @@ function formatReminderTime(timestamp: number) {
 
         <section class="settings-card">
           <div class="card-heading">
-            <div><h2>关于你</h2><p>用于简短记忆和更贴合当前任务的回应。</p></div>
+            <div><h2>身份与职责</h2><p>这些内容会组成内置系统指令，让模型始终知道自己是谁、主人是谁、应该帮助什么。</p></div>
           </div>
-          <label class="text-field"><span>怎么称呼你</span><input
+          <label class="text-field"><span>桌宠名字</span><input
+            v-model="companionStore.companionName"
+            data-testid="companion-name"
+            maxlength="24"
+            placeholder="例如：DrumCat、小鼓"
+          ></label>
+          <label class="text-field"><span>主人名字</span><input
             v-model="companionStore.userName"
+            data-testid="owner-name"
             maxlength="24"
             placeholder="例如：Arvin"
           ></label>
+          <label class="text-field"><span>主要职责</span><textarea
+            v-model="companionStore.assistantMission"
+            maxlength="300"
+            placeholder="例如：帮我拆解开发任务、保持专注、提醒休息。"
+          /></label>
           <label class="text-field"><span>当前目标</span><input
             v-model="companionStore.currentGoal"
             maxlength="80"
@@ -386,9 +495,10 @@ function formatReminderTime(timestamp: number) {
 
         <section class="settings-card ai-card">
           <div class="card-heading">
-            <div><h2>可选 AI 对话</h2><p>不开启时，本地规则仍可聊天和执行指令。</p></div>
+            <div><h2>通用 AI 对话</h2><p>内置主流厂商预设，也支持任意 OpenAI 兼容接口和 Anthropic Messages 协议。</p></div>
             <label class="switch"><input
               v-model="companionStore.ai.enabled"
+              data-testid="ai-enabled"
               type="checkbox"
             ><span /></label>
           </div>
@@ -396,21 +506,78 @@ function formatReminderTime(timestamp: number) {
             class="ai-fields"
             :class="{ disabled: !companionStore.ai.enabled }"
           >
-            <label class="text-field"><span>兼容接口地址</span><input
+            <label class="text-field"><span>服务商</span><select
+              v-model="companionStore.ai.provider"
+              data-testid="ai-provider"
+              :disabled="!companionStore.ai.enabled"
+              @change="selectAiProvider"
+            >
+              <option
+                v-for="provider in AI_PROVIDER_PRESETS"
+                :key="provider.id"
+                :value="provider.id"
+              >
+                {{ provider.name }}
+              </option>
+            </select></label>
+            <p class="provider-note">
+              {{ selectedAiPreset.description }}
+            </p>
+            <label class="text-field"><span>接口协议</span><select
+              v-model="companionStore.ai.protocol"
+              :disabled="!companionStore.ai.enabled || companionStore.ai.provider !== 'custom'"
+            >
+              <option value="openai">
+                OpenAI Chat Completions
+              </option>
+              <option value="anthropic">
+                Anthropic Messages
+              </option>
+            </select></label>
+            <label class="text-field"><span>完整接口地址</span><input
               v-model="companionStore.ai.endpoint"
               :disabled="!companionStore.ai.enabled"
-              placeholder="https://api.openai.com"
+              placeholder="https://api.example.com/v1/chat/completions"
             ></label>
             <label class="text-field"><span>模型</span><input
               v-model="companionStore.ai.model"
               :disabled="!companionStore.ai.enabled"
-              placeholder="gpt-4.1-mini"
+              :placeholder="selectedAiPreset.modelPlaceholder"
+            ></label>
+            <label class="text-field"><span>鉴权方式</span><select
+              v-model="companionStore.ai.authMode"
+              :disabled="!companionStore.ai.enabled"
+            >
+              <option value="bearer">
+                Authorization: Bearer
+              </option>
+              <option value="api-key">
+                api-key
+              </option>
+              <option value="x-api-key">
+                x-api-key
+              </option>
+              <option value="custom">
+                自定义请求头
+              </option>
+              <option value="none">
+                无需密钥
+              </option>
+            </select></label>
+            <label
+              v-if="companionStore.ai.authMode === 'custom'"
+              class="text-field"
+            ><span>密钥请求头</span><input
+              v-model="companionStore.ai.authHeader"
+              :disabled="!companionStore.ai.enabled"
+              placeholder="例如 X-API-Key"
             ></label>
             <label class="text-field"><span>本次会话密钥</span><input
-              v-model="companionStore.sessionApiKey"
+              v-model="aiSessionStore.apiKey"
               autocomplete="off"
-              :disabled="!companionStore.ai.enabled"
-              placeholder="不会写入磁盘"
+              data-testid="ai-session-key"
+              :disabled="!companionStore.ai.enabled || !aiKeyRequired"
+              :placeholder="aiKeyRequired ? '仅在内存中跨窗口同步' : '当前接口无需密钥'"
               type="password"
             ></label>
             <div class="setting-row compact-row">
@@ -421,9 +588,32 @@ function formatReminderTime(timestamp: number) {
                 type="checkbox"
               ><span /></label>
             </div>
+            <div class="ai-test-row">
+              <button
+                class="secondary-button"
+                data-testid="test-ai-connection"
+                :disabled="!companionStore.ai.enabled || aiConnectionState === 'loading'"
+                type="button"
+                @click="testAiConnection"
+              >
+                {{ aiConnectionState === 'loading' ? '正在测试…' : '测试连接' }}
+              </button>
+              <button
+                v-if="aiSessionStore.hasApiKey"
+                class="secondary-button"
+                type="button"
+                @click="aiSessionStore.clearApiKey()"
+              >
+                清除密钥
+              </button>
+              <span
+                v-if="aiConnectionMessage"
+                :class="`is-${aiConnectionState}`"
+              >{{ aiConnectionMessage }}</span>
+            </div>
           </div>
           <p class="privacy-note">
-            <span class="i-solar:shield-check-bold" />密钥仅存在内存中；退出 DrumCat 后自动清空。远程对话和图片只在你主动开启后发送。
+            <span class="i-solar:shield-check-bold" />请求通过 DrumCat 原生网络层发送，避免浏览器跨域限制；密钥只在运行内存中跨窗口同步，退出后自动清空，不写入磁盘。
           </p>
         </section>
       </div>
@@ -500,19 +690,7 @@ function formatReminderTime(timestamp: number) {
 
         <section class="settings-card">
           <div class="card-heading">
-            <div><h2>语音与图片权限</h2><p>默认关闭，只有你主动开启后聊天面板才会读取。</p></div>
-          </div>
-          <div class="setting-row">
-            <div><strong>语音输入</strong><small>依赖系统 WebView；不支持时会明确提示，不随 MVP 打包大型离线模型</small></div><label class="switch"><input
-              v-model="companionStore.privacy.voiceInput"
-              type="checkbox"
-            ><span /></label>
-          </div>
-          <div class="setting-row">
-            <div><strong>语音朗读</strong><small>使用系统语音朗读桌宠回复</small></div><label class="switch"><input
-              v-model="companionStore.privacy.voiceOutput"
-              type="checkbox"
-            ><span /></label>
+            <div><h2>图片权限</h2><p>默认关闭，只有你主动开启后聊天面板才会读取手动选择的图片。</p></div>
           </div>
           <div class="setting-row">
             <div><strong>图片理解</strong><small>允许读取你手动拖入聊天框的图片</small></div><label class="switch"><input
@@ -719,9 +897,6 @@ function formatReminderTime(timestamp: number) {
             <div><strong>当前版本</strong><small>本地 MVP</small></div><span class="value-text">v{{ appStore.version }}</span>
           </div>
           <div class="setting-row">
-            <div><strong>技术底座</strong><small>保留原项目许可与来源说明</small></div><a :href="GITHUB_LINK">查看上游项目</a>
-          </div>
-          <div class="setting-row">
             <div><strong>诊断信息</strong><small>复制系统和运行时版本，不含聊天记录</small></div><button
               class="secondary-button"
               type="button"
@@ -733,8 +908,9 @@ function formatReminderTime(timestamp: number) {
           <div class="setting-row">
             <div><strong>应用日志</strong><small>{{ logDir }}</small></div><button
               class="secondary-button"
+              :disabled="!logDir"
               type="button"
-              @click="openPath(logDir)"
+              @click="openLogDirectory"
             >
               打开目录
             </button>
@@ -742,7 +918,7 @@ function formatReminderTime(timestamp: number) {
         </section>
         <section class="settings-card privacy-summary">
           <span class="i-solar:lock-keyhole-minimalistic-bold" />
-          <div><h2>隐私默认优先</h2><p>聊天、任务和偏好保存在本机；API 密钥不落盘；语音、图片和远程 AI 默认关闭。直播模式不会把私人备忘放进模型上下文。</p></div>
+          <div><h2>隐私默认优先</h2><p>聊天、任务和偏好保存在本机；API 密钥不落盘；图片和远程 AI 默认关闭。提醒只通过文字气泡与系统文字通知呈现。</p></div>
         </section>
       </div>
     </section>
@@ -1157,6 +1333,7 @@ function formatReminderTime(timestamp: number) {
   border-top: 0;
 }
 .text-field input,
+.text-field select,
 .text-field textarea {
   min-width: 0;
   border: 1px solid #dfe3e9;
@@ -1175,6 +1352,7 @@ function formatReminderTime(timestamp: number) {
   line-height: 1.5;
 }
 .text-field input:focus,
+.text-field select:focus,
 .text-field textarea:focus {
   border-color: #aebde9;
   box-shadow: 0 0 0 3px rgba(104, 127, 208, 0.09);
@@ -1204,6 +1382,31 @@ function formatReminderTime(timestamp: number) {
 
 .ai-fields.disabled {
   opacity: 0.48;
+}
+.provider-note {
+  margin: -2px 2px 4px 124px;
+  color: #8d95a3;
+  font-size: 8px;
+  line-height: 1.45;
+}
+.ai-test-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid #eef0f3;
+  padding: 10px 2px 2px 122px;
+}
+.ai-test-row > span {
+  min-width: 0;
+  color: #8a929f;
+  font-size: 8px;
+  line-height: 1.4;
+}
+.ai-test-row > span.is-success {
+  color: #5d9871;
+}
+.ai-test-row > span.is-error {
+  color: #bd6666;
 }
 .privacy-note {
   display: flex;

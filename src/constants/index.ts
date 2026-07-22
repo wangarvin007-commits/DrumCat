@@ -1,4 +1,6 @@
-export const GITHUB_LINK = 'https://github.com/ayangweb/BongoCat'
+export const PROJECT_GITHUB_LINK = 'https://github.com/wangarvin007-commits/DrumCat'
+
+export const UPSTREAM_GITHUB_LINK = 'https://github.com/ayangweb/BongoCat'
 
 export const LISTEN_KEY = {
   SHOW_WINDOW: 'show-window',

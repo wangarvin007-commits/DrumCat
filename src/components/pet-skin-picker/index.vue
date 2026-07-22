@@ -44,8 +44,9 @@ function closeCustomization() {
     <header
       v-if="!embedded"
       class="skin-header"
+      data-tauri-drag-region
     >
-      <div>
+      <div data-tauri-drag-region>
         <small>DRUMCAT 衣橱</small>
         <strong>今天和谁一起？</strong>
       </div>
@@ -89,6 +90,7 @@ function closeCustomization() {
         :key="skin.id"
         class="skin-card"
         :class="{ active: petStore.skinId === skin.id }"
+        :data-skin-id="skin.id"
         :style="{ '--accent': skin.accent }"
         type="button"
         @click="petStore.setSkin(skin.id)"
@@ -117,6 +119,7 @@ function closeCustomization() {
       <button
         aria-label="定制专属桌宠皮肤"
         class="skin-card custom-card"
+        data-testid="custom-skin"
         style="--accent: #6f7fd8"
         type="button"
         @click="openCustomization"
@@ -166,6 +169,7 @@ function closeCustomization() {
             aria-labelledby="customization-title"
             aria-modal="true"
             class="custom-dialog"
+            data-testid="custom-skin-dialog"
             role="dialog"
             tabindex="-1"
             @keydown.esc="closeCustomization"
