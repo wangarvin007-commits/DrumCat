@@ -242,7 +242,7 @@ await check('宠物动作状态支持敲鼓、庆祝、思考、睡眠与唤醒'
   assert.equal(pet.sleeping, false)
 })
 
-await check('手动睡眠不会被被动目光跟随打断，只会被明确互动唤醒', () => {
+await check('被动目光跟随可独立回正，且不会打断手动睡眠', () => {
   setActivePinia(createPinia())
   const pet = usePetStore()
 
@@ -250,9 +250,20 @@ await check('手动睡眠不会被被动目光跟随打断，只会被明确互�
   pet.setLook(0.8, -0.4)
   assert.equal(pet.sleeping, true)
   assert.deepEqual({ ...pet.look }, { x: 0.8, y: -0.4 })
+  pet.resetLook()
+  assert.equal(pet.sleeping, true)
+  assert.deepEqual({ ...pet.look }, { x: 0, y: 0 })
 
   pet.noteActivity()
   assert.equal(pet.sleeping, false)
+})
+
+await check('鼠标停止后会定时回正，关闭互动时会立即复位', () => {
+  const device = readFileSync(join(root, 'src', 'composables', 'useDevice.ts'), 'utf8')
+
+  assert.match(device, /LOOK_RESET_DELAY_MS = 1_500/u)
+  assert.match(device, /scheduleLookReset\(\)/u)
+  assert.match(device, /cancelLookReset\(\)[\s\S]*petStore\.resetLook\(\)/u)
 })
 
 await check('悬停隐藏会取消过期计时并在关闭功能时立即恢复', () => {

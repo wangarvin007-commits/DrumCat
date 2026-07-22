@@ -6,18 +6,14 @@ DrumCat 是一个本地运行的跨平台桌宠，使用 Tauri、Vue 3 和 Rust 
 
 ## 下载
 
-- Windows 10/11 x64 安装程序：[下载 EXE](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.0/DrumCat_0.1.0_Windows_x64_setup.exe)
-- macOS Apple Silicon 安装镜像：[下载 DMG](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.0/DrumCat_0.1.0_aarch64.dmg)
-- macOS Apple Silicon 应用压缩包：[下载 ZIP](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.0/DrumCat_0.1.0_macOS_arm64.zip)
+- Windows 10/11 x64 安装程序：[下载 EXE](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.1/DrumCat_0.1.1_Windows_x64_setup.exe)
+- macOS Apple Silicon 安装镜像：[下载 DMG](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.1/DrumCat_0.1.1_aarch64.dmg)
+- macOS Apple Silicon 应用压缩包：[下载 ZIP](https://github.com/wangarvin007-commits/DrumCat/releases/download/v0.1.1/DrumCat_0.1.1_macOS_arm64.zip)
 - 全部版本与更新说明：[GitHub Releases](https://github.com/wangarvin007-commits/DrumCat/releases)
 
 Windows 安装包当前未购买代码签名证书，首次安装时 Windows Defender SmartScreen 可能显示“未知发布者”，请选择“更多信息 → 仍要运行”。macOS 发布包使用 ad-hoc 签名，尚未进行 Apple 公证；首次启动时如被 macOS 拦截，可右键应用并选择“打开”。
 
-SHA-256：
-
-- Windows EXE：`a7e8333b9184e474c827cd5bd49968c8a951c44e792365e33bcf455abe214244`
-- DMG：`e2c0a5d5ac8fad2b8111f3d9a37a85416309dbd1f2f63b4b8d4ece01ecc1d39e`
-- ZIP：`cb2c6c35fa003c77bd8f84d80435c97ada2dd72a25a0900a3be5b6218497f128`
+各安装包的 SHA-256 以对应 GitHub Release 中公布的校验值为准。
 
 ## MVP 功能
 

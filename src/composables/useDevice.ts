@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { error as logError } from '@tauri-apps/plugin-log'
-import { useThrottleFn } from '@vueuse/core'
+import { useThrottleFn, useTimeoutFn } from '@vueuse/core'
 import { isNil } from 'es-toolkit'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -39,6 +39,7 @@ interface KeyboardEvent {
 type DeviceEvent = MouseButtonEvent | MouseMoveEvent | KeyboardEvent
 
 const appWindow = getCurrentWebviewWindow()
+const LOOK_RESET_DELAY_MS = 1_500
 
 export function useDevice() {
   const appStore = useAppStore()
@@ -59,6 +60,10 @@ export function useDevice() {
     hoverHidden.value = hidden
     applyCursorPolicy()
   })
+  const {
+    start: scheduleLookReset,
+    stop: cancelLookReset,
+  } = useTimeoutFn(() => petStore.resetLook(), LOOK_RESET_DELAY_MS, { immediate: false })
 
   onMounted(async () => {
     scaleFactor.value = isMac ? await appWindow.scaleFactor() : 1
@@ -72,6 +77,8 @@ export function useDevice() {
 
   onBeforeUnmount(() => {
     unlistenScaleChange?.()
+    cancelLookReset()
+    petStore.resetLook()
     hoverAvoidance.reset()
   })
 
@@ -80,6 +87,17 @@ export function useDevice() {
     ([, hideOnHover]) => {
       if (!hideOnHover) hoverAvoidance.reset()
       applyCursorPolicy()
+    },
+    { immediate: true },
+  )
+
+  watch(
+    [() => companionStore.privacy.mouseInteraction, () => companionStore.interactionMuted],
+    ([mouseInteraction, interactionMuted]) => {
+      if (mouseInteraction && !interactionMuted) return
+
+      cancelLookReset()
+      petStore.resetLook()
     },
     { immediate: true },
   )
@@ -123,6 +141,7 @@ export function useDevice() {
       const lookY = (y - centerY) / Math.max(height * 0.8, 1)
 
       petStore.setLook(lookX, lookY)
+      scheduleLookReset()
     }
 
     updateHoverAvoidance(x, y)

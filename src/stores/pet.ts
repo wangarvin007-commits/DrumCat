@@ -216,6 +216,11 @@ export const usePetStore = defineStore('pet', () => {
     }
   }
 
+  function resetLook() {
+    look.x = 0
+    look.y = 0
+  }
+
   function reactToCompanion(action: CompanionAction, emotion: CompanionEmotion, countsAsActivity = true) {
     setEmotion(emotion, action === 'sleep' ? 0 : 2_000)
 
@@ -290,6 +295,7 @@ export const usePetStore = defineStore('pet', () => {
     reactToCompanion,
     reactToKeyboard,
     reactToMouse,
+    resetLook,
     setLook,
     setSkin,
     skinId,
