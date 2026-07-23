@@ -89,7 +89,7 @@ await check('定制皮肤入口和 Arvin 微信二维码已打包', () => {
   assert.deepEqual(parseDirectCommand('定制皮肤'), { type: 'skin', query: '定制' })
 })
 
-await check('本地指令覆盖睡眠、唤醒、专注、提醒、模式和换肤', () => {
+await check('本地指令覆盖睡眠、唤醒、专注、提醒、待办、概览、模式和换肤', () => {
   assert.deepEqual(parseDirectCommand('睡觉'), { type: 'sleep' })
   assert.deepEqual(parseDirectCommand('醒醒'), { type: 'wake' })
   assert.deepEqual(parseDirectCommand('专注 35 分钟'), { type: 'focus', minutes: 35 })
@@ -98,8 +98,32 @@ await check('本地指令覆盖睡眠、唤醒、专注、提醒、模式和换�
     minutes: 120,
     text: '开会',
   })
+  assert.deepEqual(parseDirectCommand('添加待办完成验收'), { type: 'task', text: '完成验收' })
+  assert.deepEqual(parseDirectCommand('查看今日计划'), { type: 'agenda' })
   assert.deepEqual(parseDirectCommand('会议模式'), { type: 'mode', mode: 'meeting' })
   assert.deepEqual(parseDirectCommand('换成柴犬皮肤'), { type: 'skin', query: '柴犬' })
+})
+
+await check('拖动会使用方向动作、速度倾斜和落地回弹', () => {
+  const mainPage = readFileSync(join(root, 'src', 'pages', 'main', 'index.vue'), 'utf8')
+  const sprite = readFileSync(join(root, 'src', 'components', 'pet-sprite', 'index.vue'), 'utf8')
+
+  assert.match(mainPage, /appWindow\.onMoved/u)
+  assert.match(mainPage, /beginPetDrag\(deltaX\)/u)
+  assert.match(mainPage, /dragMotion\.phase = 'landing'/u)
+  assert.match(sprite, /props\.dragDirection === 'left' \? 'running-left' : 'running-right'/u)
+  assert.match(sprite, /@keyframes drag-land/u)
+})
+
+await check('陪伴面板公开本地工具并在完成任务时驱动庆祝', () => {
+  const panel = readFileSync(join(root, 'src', 'components', 'companion-chat', 'index.vue'), 'utf8')
+  const mainPage = readFileSync(join(root, 'src', 'pages', 'main', 'index.vue'), 'utf8')
+
+  assert.match(panel, /本地工具/u)
+  assert.match(panel, /快速提醒/u)
+  assert.match(panel, /taskCompleted/u)
+  assert.match(mainPage, /handleTaskCompleted/u)
+  assert.match(mainPage, /完成一项/u)
 })
 
 await check('本地回复会驱动对应动作和表情', () => {

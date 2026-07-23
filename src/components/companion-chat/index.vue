@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 
+import type { TaskItem } from '@/stores/companion'
 import type { ChatSendPayload, CompanionAction, CompanionMessage } from '@/utils/companion'
 
+import PetSprite from '@/components/pet-sprite/index.vue'
+import { useCatStore } from '@/stores/cat'
 import { MODE_OPTIONS, useCompanionStore } from '@/stores/companion'
 import { usePetStore } from '@/stores/pet'
 import { getAiProviderPreset } from '@/utils/companion'
@@ -21,19 +24,23 @@ const emit = defineEmits<{
   close: []
   openSettings: []
   send: [payload: ChatSendPayload]
+  taskCompleted: [text: string]
 }>()
 
+const catStore = useCatStore()
 const companionStore = useCompanionStore()
 const petStore = usePetStore()
 const activeTab = ref<'chat' | 'focus' | 'actions'>('chat')
 const draft = ref('')
+const reminderDraft = ref('')
+const reminderMinutes = ref(20)
 const taskDraft = ref('')
 const selectedImage = ref<ChatSendPayload['image']>()
 const attachmentError = ref('')
 const messagesRef = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement>()
 
-const quickPrompts = ['给我加油', '敲鼓给我听', '帮我拆下一步']
+const quickPrompts = ['专注 25 分钟', '20 分钟后提醒我喝水', '查看今日计划']
 const focusTime = computed(() => {
   const minutes = Math.floor(companionStore.focus.remainingSeconds / 60).toString().padStart(2, '0')
   const seconds = (companionStore.focus.remainingSeconds % 60).toString().padStart(2, '0')
@@ -92,14 +99,45 @@ function startFocus() {
   activeTab.value = 'focus'
 }
 
+function startQuickFocus() {
+  companionStore.focus.focusMinutes = 25
+  startFocus()
+}
+
 function toggleFocusPause() {
   if (companionStore.focus.status === 'paused') companionStore.resumeFocus()
   else companionStore.pauseFocus()
 }
 
 function addTask() {
-  companionStore.addTask(taskDraft.value)
+  const value = taskDraft.value.trim()
+  if (!value) return
+
+  emit('send', { content: `添加待办 ${value}` })
   taskDraft.value = ''
+}
+
+function addReminder() {
+  const value = reminderDraft.value.trim()
+  if (!value) return
+
+  const minutes = Math.max(1, Math.min(24 * 60, Number(reminderMinutes.value) || 20))
+  emit('send', { content: `${minutes} 分钟后提醒我 ${value}` })
+  reminderDraft.value = ''
+  reminderMinutes.value = minutes
+}
+
+function handleTaskToggle(task: TaskItem) {
+  if (task.done) emit('taskCompleted', task.text)
+}
+
+function openTodayPlan() {
+  activeTab.value = 'focus'
+}
+
+function showAgenda() {
+  sendQuickPrompt('查看今日计划')
+  activeTab.value = 'chat'
 }
 
 function formatReminderTime(timestamp: number) {
@@ -188,7 +226,20 @@ async function loadImage(file: File) {
         class="pet-identity"
         data-tauri-drag-region
       >
-        <span class="identity-dot" />
+        <div class="identity-avatar">
+          <PetSprite
+            :animation-nonce="petStore.animationNonce"
+            :animation-speed="catStore.model.animationSpeed"
+            :emotion="petStore.currentEmotion"
+            :emotion-nonce="petStore.emotionNonce"
+            :look="petStore.look"
+            :mirror="catStore.model.mirror"
+            :reduced-motion="catStore.model.reducedMotion"
+            :skin="petStore.currentSkin"
+            :sleeping="petStore.sleeping"
+            :state="petStore.animationState"
+          />
+        </div>
         <div data-tauri-drag-region>
           <strong>{{ petStore.currentSkin.name }}</strong>
           <small>{{ aiStatusLabel }}</small>
@@ -233,7 +284,7 @@ async function loadImage(file: File) {
         type="button"
         @click="activeTab = 'actions'"
       >
-        快捷
+        工具
       </button>
     </nav>
 
@@ -427,6 +478,7 @@ async function loadImage(file: File) {
           <input
             v-model="task.done"
             type="checkbox"
+            @change="handleTaskToggle(task)"
           >
           <span :class="{ done: task.done }">{{ task.text }}</span>
           <button
@@ -438,6 +490,31 @@ async function loadImage(file: File) {
           任务越少，越容易进入状态。
         </p>
       </div>
+
+      <form
+        class="reminder-composer"
+        @submit.prevent="addReminder"
+      >
+        <input
+          v-model="reminderDraft"
+          placeholder="快速提醒，例如喝水…"
+        >
+        <label>
+          <input
+            v-model.number="reminderMinutes"
+            max="1440"
+            min="1"
+            type="number"
+          >
+          分钟后
+        </label>
+        <button
+          :disabled="!reminderDraft.trim()"
+          type="submit"
+        >
+          添加
+        </button>
+      </form>
 
       <section class="reminder-list">
         <header>
@@ -470,6 +547,51 @@ async function loadImage(file: File) {
       v-else
       class="actions-view"
     >
+      <section>
+        <header>
+          <strong>本地工具</strong>
+          <small>不接 AI 也能直接使用</small>
+        </header>
+        <div class="utility-grid">
+          <button
+            data-testid="quick-focus"
+            type="button"
+            @click="startQuickFocus"
+          >
+            <span>25:00</span>
+            <strong>开始专注</strong>
+            <small>宠物安静陪伴</small>
+          </button>
+          <button
+            data-testid="quick-reminder"
+            type="button"
+            @click="sendQuickPrompt('20 分钟后提醒我喝水')"
+          >
+            <span>20m</span>
+            <strong>喝水提醒</strong>
+            <small>到点文字通知</small>
+          </button>
+          <button
+            data-testid="open-today-plan"
+            type="button"
+            @click="openTodayPlan"
+          >
+            <span>{{ companionStore.tasks.filter(task => !task.done).length }}</span>
+            <strong>今日待办</strong>
+            <small>添加与勾选任务</small>
+          </button>
+          <button
+            data-testid="show-agenda"
+            type="button"
+            @click="showAgenda"
+          >
+            <span>✓</span>
+            <strong>今日概览</strong>
+            <small>汇总任务与提醒</small>
+          </button>
+        </div>
+      </section>
+
       <section>
         <header>
           <strong>逗逗它</strong>
@@ -560,16 +682,29 @@ async function loadImage(file: File) {
   gap: 10px;
 }
 
-.identity-dot {
-  width: 11px;
-  height: 11px;
-  border: 3px solid #e8f4ec;
-  border-radius: 50%;
-  background: #6fad87;
-  box-sizing: content-box;
+.identity-avatar {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  overflow: hidden;
+  border: 1px solid #e0e4eb;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #fff, #f0f3f8);
+  box-shadow: 0 4px 12px rgba(48, 55, 70, 0.08);
 }
 
-.pet-identity div {
+.identity-avatar :deep(.pet-sprite-stage) {
+  padding: 2px;
+}
+
+.identity-avatar :deep(.emotion-badge),
+.identity-avatar :deep(.pet-drum),
+.identity-avatar :deep(.sleep-badge) {
+  display: none;
+}
+
+.pet-identity > div:last-child {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -972,6 +1107,58 @@ async function loadImage(file: File) {
   padding-inline: 11px;
 }
 
+.reminder-composer {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.reminder-composer > input,
+.reminder-composer label {
+  min-width: 0;
+  border: 1px solid #dfe3ea;
+  border-radius: 11px;
+  outline: 0;
+  padding: 8px 9px;
+  background: #fff;
+  color: #4d5563;
+  font-size: 10px;
+}
+
+.reminder-composer label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #7c8492;
+}
+
+.reminder-composer label input {
+  width: 33px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #4d5563;
+  font-weight: 700;
+}
+
+.reminder-composer button {
+  border: 1px solid #dfe3ea;
+  border-radius: 11px;
+  padding: 7px 10px;
+  background: #fff;
+  color: #626a79;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.reminder-composer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .task-list {
   display: flex;
   width: 100%;
@@ -1108,6 +1295,62 @@ async function loadImage(file: File) {
 .actions-view header small {
   color: #9aa1ad;
   font-size: 9px;
+}
+
+.utility-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.utility-grid button {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  border: 1px solid #e0e4eb;
+  border-radius: 14px;
+  padding: 9px;
+  background: #fff;
+  color: #5c6472;
+  cursor: pointer;
+  text-align: left;
+}
+
+.utility-grid button:hover {
+  border-color: #bdc9ef;
+  background: #f6f8ff;
+}
+
+.utility-grid button > span {
+  display: grid;
+  grid-row: 1 / 3;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  place-items: center;
+  background: #eef2ff;
+  color: #6177c5;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.utility-grid strong {
+  align-self: end;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.utility-grid small {
+  align-self: start;
+  overflow: hidden;
+  color: #9aa1ad;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .action-grid {

@@ -6,7 +6,7 @@ import { Menu, PredefinedMenuItem } from '@tauri-apps/api/menu'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useDebounceFn, useEventListener } from '@vueuse/core'
 import { round } from 'es-toolkit'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import type { PetCommand } from '@/stores/pet'
 import type {
@@ -47,6 +47,8 @@ const PANEL_HEIGHT = 520
 const MIN_PANEL_PET_SCALE = 92
 
 type OpenPanel = 'chat' | 'skins' | null
+type DragDirection = 'left' | 'right'
+type DragPhase = 'idle' | 'dragging' | 'landing'
 
 const { startListening } = useDevice()
 const appWindow = getCurrentWebviewWindow()
@@ -60,14 +62,24 @@ const openPanel = ref<OpenPanel>(null)
 const chatBusy = ref(false)
 const bubbleText = ref('')
 const bubbleVisible = ref(false)
+const dragMotion = reactive({
+  direction: 'right' as DragDirection,
+  intensity: 0,
+  phase: 'idle' as DragPhase,
+})
 
 let dragCandidate: { x: number, y: number } | undefined
 let applyingScale = false
 let bubbleTimer: number | undefined
 let clockTimer: number | undefined
+let dragLandingTimer: number | undefined
+let dragMoveTimer: number | undefined
 let proactiveTimer: number | undefined
 let chatAbortController: AbortController | undefined
+let lastDragPosition: PhysicalPosition | undefined
 let positionBeforePanel: PhysicalPosition | undefined
+let unlistenWindowMoved: (() => void) | undefined
+let unmounted = false
 let previousPanelOpen = false
 let windowTransition = 0
 
@@ -111,16 +123,21 @@ const remoteAiReady = computed(() => {
 onMounted(() => {
   startListening()
   petStore.wake()
+  void setupDragMotionListener()
 
   clockTimer = window.setInterval(handleClockTick, 1_000)
   proactiveTimer = window.setInterval(handleProactiveCheck, 60_000)
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   if (bubbleTimer) window.clearTimeout(bubbleTimer)
   if (clockTimer) window.clearInterval(clockTimer)
+  if (dragLandingTimer) window.clearTimeout(dragLandingTimer)
+  if (dragMoveTimer) window.clearTimeout(dragMoveTimer)
   if (proactiveTimer) window.clearInterval(proactiveTimer)
   chatAbortController?.abort()
+  unlistenWindowMoved?.()
 })
 
 useTauriListen<PetCommand>(LISTEN_KEY.PET_COMMAND, ({ payload }) => {
@@ -272,6 +289,28 @@ async function executeDirectCommand(content: string): Promise<boolean> {
     return true
   }
 
+  if (command.type === 'task') {
+    companionStore.addTask(command.text)
+    presentAssistantMessage(`已经加入今日待办：${command.text}`, 'wave', 'happy')
+    return true
+  }
+
+  if (command.type === 'agenda') {
+    const pendingTasks = companionStore.tasks.filter(task => !task.done)
+    const taskSummary = pendingTasks.length
+      ? `待办 ${pendingTasks.length} 项：${pendingTasks.slice(0, 3).map(task => task.text).join('、')}`
+      : '今天还没有待办'
+    const reminderSummary = companionStore.pendingReminders.length
+      ? `，另有 ${companionStore.pendingReminders.length} 条待触发提醒`
+      : ''
+    const focusSummary = companionStore.focus.completedSessions
+      ? `。今天已完成 ${companionStore.focus.completedSessions} 轮专注`
+      : ''
+
+    presentAssistantMessage(`${taskSummary}${reminderSummary}${focusSummary}。`, pendingTasks.length ? 'think' : 'wave', pendingTasks.length ? 'thinking' : 'happy')
+    return true
+  }
+
   if (command.type === 'mode') {
     companionStore.mode = command.mode
     presentAssistantMessage(`已经切换到${modeLabel.value}。`, command.mode === 'meeting' ? 'idle' : 'wave', 'happy')
@@ -416,6 +455,67 @@ function handleProactiveCheck() {
   presentAssistantMessage('坐得有点久啦，喝口水、看看远处，再继续也不迟。', 'wave', 'happy')
 }
 
+async function setupDragMotionListener() {
+  lastDragPosition = await appWindow.outerPosition()
+  const unlisten = await appWindow.onMoved(({ payload }) => {
+    const previousPosition = lastDragPosition
+    lastDragPosition = payload
+
+    if (!previousPosition || dragMotion.phase === 'idle') return
+
+    const deltaX = payload.x - previousPosition.x
+    const deltaY = payload.y - previousPosition.y
+    const distance = Math.hypot(deltaX, deltaY)
+
+    if (dragLandingTimer) window.clearTimeout(dragLandingTimer)
+    if (Math.abs(deltaX) >= 1) {
+      dragMotion.direction = deltaX < 0 ? 'left' : 'right'
+    }
+
+    dragMotion.phase = 'dragging'
+    dragMotion.intensity = Math.max(0.35, Math.min(1, distance / 36))
+
+    if (dragMoveTimer) window.clearTimeout(dragMoveTimer)
+    dragMoveTimer = window.setTimeout(finishPetDrag, 180)
+  })
+
+  if (unmounted) unlisten()
+  else unlistenWindowMoved = unlisten
+}
+
+function beginPetDrag(deltaX: number) {
+  if (dragLandingTimer) window.clearTimeout(dragLandingTimer)
+  if (dragMoveTimer) window.clearTimeout(dragMoveTimer)
+
+  dragMotion.direction = deltaX < 0 ? 'left' : 'right'
+  dragMotion.intensity = 0.45
+  dragMotion.phase = 'dragging'
+  petStore.noteActivity()
+
+  void appWindow.outerPosition().then((position) => {
+    lastDragPosition = position
+  })
+
+  void appWindow.startDragging()
+    .catch(() => undefined)
+    .finally(() => {
+      if (dragMoveTimer) window.clearTimeout(dragMoveTimer)
+      dragMoveTimer = window.setTimeout(finishPetDrag, 80)
+    })
+}
+
+function finishPetDrag() {
+  if (dragMotion.phase === 'idle') return
+  if (dragMoveTimer) window.clearTimeout(dragMoveTimer)
+  if (dragLandingTimer) window.clearTimeout(dragLandingTimer)
+
+  dragMotion.intensity = 0
+  dragMotion.phase = 'landing'
+  dragLandingTimer = window.setTimeout(() => {
+    dragMotion.phase = 'idle'
+  }, 360)
+}
+
 function handleMouseDown(event: MouseEvent) {
   petStore.noteActivity()
   if (event.button !== 0) return
@@ -467,11 +567,13 @@ function handleMouseMove(event: MouseEvent) {
   const { buttons, shiftKey, movementX, movementY } = event
 
   if (buttons === 1 && dragCandidate) {
-    const distance = Math.hypot(event.screenX - dragCandidate.x, event.screenY - dragCandidate.y)
+    const deltaX = event.screenX - dragCandidate.x
+    const deltaY = event.screenY - dragCandidate.y
+    const distance = Math.hypot(deltaX, deltaY)
 
     if (distance >= 4) {
       dragCandidate = undefined
-      void appWindow.startDragging()
+      beginPetDrag(deltaX)
       return
     }
   }
@@ -491,6 +593,10 @@ function openSettings() {
 
 function handlePanelAction(action: CompanionAction) {
   petStore.executeAction(action)
+}
+
+function handleTaskCompleted(text: string) {
+  presentAssistantMessage(`完成一项：${text}。做得不错，继续保持！`, 'celebrate', 'excited')
 }
 </script>
 
@@ -520,6 +626,9 @@ function handlePanelAction(action: CompanionAction) {
       <PetSprite
         :animation-nonce="petStore.animationNonce"
         :animation-speed="catStore.model.animationSpeed"
+        :drag-direction="dragMotion.direction"
+        :drag-intensity="dragMotion.intensity"
+        :drag-phase="dragMotion.phase"
         :emotion="petStore.currentEmotion"
         :emotion-nonce="petStore.emotionNonce"
         :look="petStore.look"
@@ -582,6 +691,7 @@ function handlePanelAction(action: CompanionAction) {
       @close="openPanel = null"
       @open-settings="openSettings"
       @send="handleSendMessage"
+      @task-completed="handleTaskCompleted"
     />
   </main>
 </template>

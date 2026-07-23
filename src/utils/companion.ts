@@ -216,6 +216,8 @@ export type DirectCommand
     | { type: 'wake' }
     | { type: 'focus', minutes: number }
     | { type: 'reminder', minutes: number, text: string }
+    | { type: 'task', text: string }
+    | { type: 'agenda' }
     | { type: 'skin', query: string }
     | { type: 'mode', mode: CompanionMode }
 
@@ -360,6 +362,17 @@ export function parseDirectCommand(input: string): DirectCommand | undefined {
 
     return { type: 'reminder', minutes: Math.max(1, Math.min(minutes, 7 * 24 * 60)), text: reminder[3].trim() }
   }
+
+  if (/^(?:查看)?(?:今日|今天)?(?:计划|待办|任务)(?:列表|概览)?[。！!]?$/u.test(normalized)
+    || /^我?(?:今天)?(?:要做什么|有什么待办|有哪些任务)[？?。！!]?$/u.test(normalized)) {
+    return { type: 'agenda' }
+  }
+
+  const taskPrefix = normalized.match(/^(?:帮我)?(?:添加|新建|记录|记下|记一下)(?:一个)?(?:待办|任务)[：:\s]*/u)
+  const taskText = taskPrefix
+    ? normalized.slice(taskPrefix[0].length).replace(/[。！!]+$/u, '').trim()
+    : ''
+  if (taskText) return { type: 'task', text: taskText }
 
   const exactModes: Record<string, CompanionMode> = {
     安静模式: 'quiet',

@@ -11,8 +11,14 @@ interface Frame {
   row: number
 }
 
-const props = defineProps<{
+type DragDirection = 'left' | 'right'
+type DragPhase = 'idle' | 'dragging' | 'landing'
+
+const props = withDefaults(defineProps<{
   animationNonce: number
+  dragDirection?: DragDirection
+  dragIntensity?: number
+  dragPhase?: DragPhase
   emotion: CompanionEmotion
   emotionNonce: number
   look: { x: number, y: number }
@@ -22,7 +28,11 @@ const props = defineProps<{
   skin: PetSkin
   sleeping?: boolean
   state: PetAnimationState
-}>()
+}>(), {
+  dragDirection: 'right',
+  dragIntensity: 0,
+  dragPhase: 'idle',
+})
 
 const STATE_ROWS: Record<PetAnimationState, { frames: number, row: number, duration: number }> = {
   'failed': { row: 5, frames: 8, duration: 180 },
@@ -50,8 +60,13 @@ const frame = ref<Frame>(IDLE_FRAMES[0])
 let frameIndex = 0
 let frameTimer: number | undefined
 
+const effectiveState = computed<PetAnimationState>(() => {
+  if (props.dragPhase !== 'dragging') return props.state
+  return props.dragDirection === 'left' ? 'running-left' : 'running-right'
+})
+
 const lookDirectionFrame = computed<Frame | undefined>(() => {
-  if (props.skin.spriteRows !== 11 || props.sleeping || props.state !== 'idle') return
+  if (props.skin.spriteRows !== 11 || props.sleeping || effectiveState.value !== 'idle') return
 
   const magnitude = Math.hypot(props.look.x, props.look.y)
   if (magnitude < 0.24) return
@@ -66,16 +81,32 @@ const lookDirectionFrame = computed<Frame | undefined>(() => {
 
 const visibleFrame = computed(() => lookDirectionFrame.value ?? frame.value)
 
-const spriteStyle = computed(() => ({
-  backgroundImage: `url(${props.skin.spritesheet})`,
-  backgroundPosition: `${visibleFrame.value.column / 7 * 100}% ${visibleFrame.value.row / (props.skin.spriteRows - 1) * 100}%`,
-  backgroundSize: `800% ${props.skin.spriteRows * 100}%`,
-  transform: [
-    `translate3d(${lookDirectionFrame.value ? 0 : props.look.x * 5}px, ${lookDirectionFrame.value ? 0 : props.look.y * 2}px, 0)`,
-    `rotate(${lookDirectionFrame.value ? 0 : props.look.x * 1.3}deg)`,
-    props.mirror ? 'scaleX(-1)' : 'scaleX(1)',
-  ].join(' '),
-}))
+const spriteStyle = computed(() => {
+  const dragSign = props.dragDirection === 'left' ? -1 : 1
+  const dragIntensity = Math.max(0, Math.min(1, props.dragIntensity))
+  const dragging = props.dragPhase === 'dragging'
+  const translateX = dragging
+    ? dragSign * (2 + dragIntensity * 3)
+    : lookDirectionFrame.value ? 0 : props.look.x * 5
+  const translateY = dragging
+    ? -(5 + dragIntensity * 6)
+    : lookDirectionFrame.value ? 0 : props.look.y * 2
+  const rotation = dragging
+    ? dragSign * (3 + dragIntensity * 5)
+    : lookDirectionFrame.value ? 0 : props.look.x * 1.3
+
+  return {
+    backgroundImage: `url(${props.skin.spritesheet})`,
+    backgroundPosition: `${visibleFrame.value.column / 7 * 100}% ${visibleFrame.value.row / (props.skin.spriteRows - 1) * 100}%`,
+    backgroundSize: `800% ${props.skin.spriteRows * 100}%`,
+    transform: [
+      `translate3d(${translateX}px, ${translateY}px, 0)`,
+      `rotate(${rotation}deg)`,
+      `scaleY(${dragging ? 1 - dragIntensity * 0.035 : 1})`,
+      props.mirror ? 'scaleX(-1)' : 'scaleX(1)',
+    ].join(' '),
+  }
+})
 
 const emotionEmoji = computed(() => ({
   excited: '♪',
@@ -97,9 +128,9 @@ function getFrames(): Frame[] {
     return [{ row: 0, column: props.skin.sleepFrame, duration: 2_400 }]
   }
 
-  if (props.state === 'idle') return props.reducedMotion ? [IDLE_FRAMES[0]] : IDLE_FRAMES
+  if (effectiveState.value === 'idle') return props.reducedMotion ? [IDLE_FRAMES[0]] : IDLE_FRAMES
 
-  const state = STATE_ROWS[props.state]
+  const state = STATE_ROWS[effectiveState.value]
 
   const frames = Array.from({ length: state.frames }, (_, column) => ({
     row: state.row,
@@ -132,7 +163,16 @@ function startAnimation() {
 }
 
 watch(
-  () => [props.animationNonce, props.skin.id, props.sleeping, props.state, props.reducedMotion, props.animationSpeed],
+  () => [
+    props.animationNonce,
+    props.dragDirection,
+    props.dragPhase,
+    props.skin.id,
+    props.sleeping,
+    props.state,
+    props.reducedMotion,
+    props.animationSpeed,
+  ],
   startAnimation,
   { immediate: true },
 )
@@ -143,8 +183,13 @@ onBeforeUnmount(clearFrameTimer)
 <template>
   <div
     class="pet-sprite-stage"
-    :class="{ 'is-sleeping': sleeping }"
-    :data-animation-state="state"
+    :class="{
+      'is-dragging': dragPhase === 'dragging',
+      'is-landing': dragPhase === 'landing',
+      'is-sleeping': sleeping,
+    }"
+    :data-animation-state="effectiveState"
+    :data-drag-phase="dragPhase"
     :data-skin-id="skin.id"
     :data-sleeping="sleeping ? 'true' : 'false'"
     data-testid="pet-sprite"
@@ -207,6 +252,17 @@ onBeforeUnmount(clearFrameTimer)
     transform 90ms linear,
     filter 180ms ease;
   will-change: background-position, transform;
+}
+
+.is-dragging .pet-sprite {
+  filter: drop-shadow(0 14px 12px rgba(22, 26, 35, 0.19));
+  transition:
+    transform 65ms linear,
+    filter 100ms ease;
+}
+
+.is-landing .pet-sprite {
+  animation: drag-land 360ms cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 
 .pet-drum {
@@ -296,6 +352,25 @@ onBeforeUnmount(clearFrameTimer)
   }
   50% {
     translate: 0 2px;
+  }
+}
+
+@keyframes drag-land {
+  0% {
+    translate: 0 -7px;
+    scale: 1 0.97;
+  }
+  42% {
+    translate: 0 2px;
+    scale: 1.045 0.92;
+  }
+  72% {
+    translate: 0 -1px;
+    scale: 0.985 1.025;
+  }
+  100% {
+    translate: 0 0;
+    scale: 1;
   }
 }
 
